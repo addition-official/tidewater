@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Id": "tidewater.workspaces",
+        "Name": "Tidewater: Workspaces",
+        "Description": "Workspace pills",
+        "Icon": "virtual-desktops",
+        "Category": "Windows and Tasks",
+        "License": "GPL-3.0-or-later",
+        "Version": "0.1.0",
+        "Authors": [
+            {
+                "Name": "addition-official"
+            }
+        ],
+        "Website": "https://github.com/addition-official/tidewater",
+        "BugReportUrl": "https://github.com/addition-official/tidewater/issues"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet"
+}

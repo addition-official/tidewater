@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="showSeconds" type="Bool"><default>true</default></entry>
+    <!-- system = follow Region & Language, 24h, 12h -->
+    <entry name="hourMode" type="String"><default>system</default></entry>
+    <entry name="showDate" type="Bool"><default>true</default></entry>
+    <!-- Qt date pattern for the line under the time: d/dd day, ddd/dddd weekday,
+         M/MM/MMM/MMMM month, yy/yyyy year; anything in 'quotes' is literal. -->
+    <entry name="dateFormat" type="String"><default>ddd d MMM</default></entry>
+  </group>
+</kcfg>

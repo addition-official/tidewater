@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "KWin/WindowSwitcher",
+    "KPlugin": {
+        "Id": "tidewater-switcher",
+        "Name": "Tidewater",
+        "Description": "Windows 11 style Alt+Tab",
+        "License": "GPL-3.0-or-later",
+        "Version": "0.1.0",
+        "Authors": [
+            {
+                "Name": "addition-official"
+            }
+        ],
+        "Website": "https://github.com/addition-official/tidewater",
+        "BugReportUrl": "https://github.com/addition-official/tidewater/issues"
+    }
+}

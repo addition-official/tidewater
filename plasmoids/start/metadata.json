@@ -1,0 +1,23 @@
+{
+    "KPlugin": {
+        "Id": "tidewater.start",
+        "Name": "Tidewater: Start menu",
+        "Description": "Start button and start menu",
+        "Icon": "start-here-kde",
+        "Category": "Windows and Tasks",
+        "License": "GPL-3.0-or-later",
+        "Version": "0.1.0",
+        "Authors": [
+            {
+                "Name": "addition-official"
+            }
+        ],
+        "Website": "https://github.com/addition-official/tidewater",
+        "BugReportUrl": "https://github.com/addition-official/tidewater/issues"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.launchermenu"
+    ]
+}
