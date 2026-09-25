@@ -110,6 +110,22 @@ Logs and the widgets' data, for bug reports:
 - `layout.js`     the panel arrangement (a Plasma desktop script)
 - `colors/`, `fonts/`  colour schemes; Rubik and Material Symbols
 
+## A note on how this was built
+
+The code in Tidewater was written by AI, working under my direction. I didn't
+write it by hand, and I want to be upfront about that.
+
+What's mine: the project and what it should be. I decided on Windows 11's
+layout and behaviour on KDE Plasma 6 and picked the features: Alt+Tab in rows,
+live window previews, pinning, drag to reorder, the same taskbar on every
+desktop. I made the design calls, threw out versions that didn't work, and
+tested every build on my own machine (Plasma 6, Wayland, two monitors). Most of
+the bugs that got fixed were ones I found, reported and chased down, sometimes
+against the AI's own wrong guesses.
+
+The AI also reviewed the code for bugs and security issues, and wrote this
+README.
+
 ## License and credits
 
 Copyright (C) 2026 addition-official.
