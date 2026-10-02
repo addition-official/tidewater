@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
 // A quick-settings tile: accent-filled while on,
-// grey while off, Material glyph, 14px title, 12px subtitle, chevron to a page.
+// gray while off, Material glyph, 14px title, 12px subtitle, chevron to a page.
 import QtQuick
 import QtQuick.Layouts
 import "common"
@@ -13,6 +13,7 @@ Rectangle {
     property string subtitle
     property string glyph
     property string fallback
+    property string svg               // a drawing in Glyph.qml, used instead of `glyph`
     property bool on: false
     property bool available: true
     property bool hasPage: false
@@ -48,6 +49,7 @@ Rectangle {
             Glyph {
                 name: tile.glyph
                 fallback: tile.fallback
+                svg: tile.svg
                 size: 24
                 color: tile.ink
                 fontAvailable: tile.pal.hasIconFont

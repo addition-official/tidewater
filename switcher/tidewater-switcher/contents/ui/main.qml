@@ -4,7 +4,7 @@
 // Taken from remapprShell and modified for Tidewater by addition-official, 2026.
 //
 // Tidewater Alt+Tab, in the manner of Windows 11: one panel on the primary
-// monitor, window cards in centred rows that wrap, each card an icon and
+// monitor, window cards in centered rows that wrap, each card an icon and
 // title over a live thumbnail sized to the window's own shape. The selected
 // card gets an accent ring; the card under the mouse gets an X.
 //
@@ -49,7 +49,7 @@ KWin.TabBoxSwitcher {
     readonly property real minCard: 150
     readonly property real maxCard: 380
 
-    // ---- colours (from the active colour scheme) --------------------------------
+    // ---- colors (from the active color scheme) --------------------------------
     readonly property color ink: Kirigami.Theme.textColor
     readonly property color accent: Kirigami.Theme.highlightColor
     readonly property bool dark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
@@ -108,15 +108,15 @@ KWin.TabBoxSwitcher {
                     if (n > 0)
                         content.select(((tabBox.currentIndex + delta) % n + n) % n);
                 }
-                // Up/Down: the card in the next row whose centre is nearest this one's.
+                // Up/Down: the card in the next row whose center is nearest this one's.
                 function vertical(dir) {
                     const g = wall.geo, cur = g[tabBox.currentIndex];
                     if (!cur) return;
-                    const centre = cur.x + cur.w / 2;
+                    const center = cur.x + cur.w / 2;
                     let best = -1, bestDist = Infinity;
                     for (let i = 0; i < g.length; ++i) {
                         if (!g[i] || g[i].row !== cur.row + dir) continue;
-                        const d = Math.abs(g[i].x + g[i].w / 2 - centre);
+                        const d = Math.abs(g[i].x + g[i].w / 2 - center);
                         if (d < bestDist) { bestDist = d; best = i; }
                     }
                     content.select(best);
@@ -148,7 +148,7 @@ KWin.TabBoxSwitcher {
                         height: wall.contentH
 
                         // Where every card goes: rows filled left to right up to
-                        // about 80% of the screen, each row centred.
+                        // about 80% of the screen, each row centered.
                         property var geo: []
                         property real contentW: 0
                         property real contentH: 0
@@ -162,7 +162,7 @@ KWin.TabBoxSwitcher {
                         }
 
                         // Rows for one thumbnail height: filled left to right up to
-                        // about 80% of the screen's width, each row centred.
+                        // about 80% of the screen's width, each row centered.
                         function arrange(th) {
                             const n = cards.count;
                             const maxW = tabBox.home.width * 0.8 - 2 * tabBox.pad;

@@ -2,11 +2,11 @@
     "KPlugin": {
         "Id": "tidewater.notifications",
         "Name": "Tidewater: Notifications",
-        "Description": "Notification centre",
+        "Description": "Notification center",
         "Icon": "preferences-desktop-notification-bell",
-        "Category": "Tasks",
+        "Category": "System Information",
         "License": "GPL-3.0-or-later",
-        "Version": "0.1.0",
+        "Version": "0.2.0",
         "Authors": [
             {
                 "Name": "addition-official"

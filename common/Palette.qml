@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The design's colour roles, worked out by the colour engine (Scheme.js).
-// Light or dark follows Plasma; the seed is the design's blue, so the colours
-// match the screenshots exactly in both modes.
+// The design's color roles, worked out by the color engine (Scheme.js).
+// Light or dark follows Plasma; the seed is the design's blue, which gives
+// the same colors on every machine in both modes.
 import QtQuick
 import org.kde.kirigami as Kirigami
 import "Scheme.js" as Scheme

@@ -8,8 +8,10 @@
 # over the session bus. Nothing uses the network or sudo. Try it by hand:
 #
 #   python3 menu.py apps | recent | stats | media | files <query>
-#   python3 menu.py launch <desktop-id> | open <url> | media-cmd PlayPause
+#   python3 menu.py launch <desktop-id> | action <desktop-id> <action-id>
+#   python3 menu.py open <url> | media-cmd PlayPause|Next|Previous
 #   python3 menu.py taskbar-pins | taskbar-pin <desktop-id> | taskbar-unpin <desktop-id>
+#   python3 menu.py session lock|sleep|logout|restart|shutdown|power|settings
 
 import glob
 import json
@@ -17,8 +19,10 @@ import locale
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 
@@ -40,34 +44,64 @@ def run(cmd, timeout=3):
 # ---- applications --------------------------------------------------------------
 
 def data_dirs():
-    dirs = [os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share")]
-    dirs += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
-    for extra in ("/var/lib/flatpak/exports/share", os.path.join(HOME, ".local/share/flatpak/exports/share"),
-                  "/var/lib/snapd/desktop"):
-        if extra not in dirs:
-            dirs.append(extra)
-    return dirs
+    home = os.environ.get("XDG_DATA_HOME", "")
+    if not os.path.isabs(home):             # the spec says: ignore relative paths
+        home = os.path.join(HOME, ".local/share")
+    dirs = [home] + (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    dirs += ["/var/lib/flatpak/exports/share", os.path.join(HOME, ".local/share/flatpak/exports/share"),
+             "/var/lib/snapd/desktop"]
+    # Only absolute folders (an empty entry would mean "./applications"),
+    # each once, in order.
+    out = []
+    for d in dirs:
+        d = os.path.normpath(d) if os.path.isabs(d) else ""
+        if d and d not in out:
+            out.append(d)
+    return out
+
+
+DESKTOP_MAX = 256 * 1024     # no real .desktop file is anywhere near this big
+
+
+def read_small_file(path, limit=DESKTOP_MAX):
+    """The text of a regular file, at most `limit` bytes; None for anything
+    else (a FIFO, a device, /dev/zero behind a symlink) or on any error."""
+    try:
+        if not stat.S_ISREG(os.stat(path).st_mode):
+            return None
+        # Non-blocking, so a file swapped for a FIFO after the check can't hang us,
+        # and checked again on the open file itself.
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        return os.read(fd, limit).decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
 
 
 def read_desktop(path):
     """The [Desktop Entry] keys, plus each [Desktop Action X] under entry["_actions"][X]."""
     entry, section, actions = {}, None, {}
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("["):
-                    section = line
-                    continue
-                if "=" not in line or line.startswith("#"):
-                    continue
-                k, v = line.split("=", 1)
-                if section == "[Desktop Entry]":
-                    entry[k.strip()] = v.strip()
-                elif section and section.startswith("[Desktop Action ") and section.endswith("]"):
-                    actions.setdefault(section[len("[Desktop Action "):-1], {})[k.strip()] = v.strip()
-    except OSError:
+    text = read_small_file(path)
+    if text is None:
         return None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            section = line
+            continue
+        if "=" not in line or line.startswith("#"):
+            continue
+        k, v = line.split("=", 1)
+        if section == "[Desktop Entry]":
+            entry[k.strip()] = v.strip()
+        elif section and section.startswith("[Desktop Action ") and section.endswith("]"):
+            actions.setdefault(section[len("[Desktop Action "):-1], {})[k.strip()] = v.strip()
     entry["_actions"] = actions
     return entry
 
@@ -110,19 +144,41 @@ def exec_args(line, entry, path):
         i += 1
     if started:
         args.append(cur)
+    # One pass over each argument, so a %k or %c that turns up inside the
+    # app's Name or file path is never expanded again.
+    fill = {"%": "%", "c": localized(entry, "Name"), "k": path or ""}
     out = []
     for a in args:
-        if a == "%i":
+        if a == "%i":                                  # a whole argument: two of them
             if entry.get("Icon"):
                 out += ["--icon", entry["Icon"]]
             continue
-        if a in ("%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%v", "%m"):
+        if re.fullmatch(r"%[^%ck]", a):                # %f, %u, ... (or an unknown code) on its own: no argument
             continue
-        a = re.sub(r"%[fFuUdDnNvm]", "", a)            # codes inside an argument
-        a = a.replace("%c", localized(entry, "Name")).replace("%k", path or "")
-        a = a.replace("%%", "%")
-        out.append(a)
+        # fFuUdDnNvm, %i inside an argument and unknown codes are all dropped
+        out.append(re.sub(r"%(.)", lambda m: fill.get(m.group(1), ""), a))
     return out
+
+
+def spawn(args, workdir=""):
+    """Run an Exec line (already split) detached, from the desktop file's Path=
+    if that folder exists, else from home. A relative program (./start.sh)
+    is found in that folder. True if it started."""
+    cwd = workdir if workdir and os.path.isabs(workdir) and os.path.isdir(workdir) else HOME
+    if not args:
+        return False
+    prog = args[0]
+    if "/" in prog and not os.path.isabs(prog):
+        prog = os.path.normpath(os.path.join(cwd, prog))
+    prog = shutil.which(prog)
+    if not prog:
+        return False
+    try:
+        subprocess.Popen([prog] + args[1:], start_new_session=True, cwd=cwd,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return False
+    return True
 
 
 def launch_action(did, aid):
@@ -133,10 +189,7 @@ def launch_action(did, aid):
     if not a or not a.get("Exec"):
         return
     # %i / %c / %k refer to the app itself (its Icon, Name and file)
-    args = exec_args(a["Exec"], e, path)
-    if args and shutil.which(args[0]):
-        subprocess.Popen(args, start_new_session=True, cwd=e.get("Path") or HOME,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    spawn(exec_args(a["Exec"], e, path), e.get("Path", ""))
 
 
 def localized(entry, key):
@@ -147,16 +200,35 @@ def localized(entry, key):
     return ""
 
 
+def desktop_files(base):
+    """Every *.desktop file under base, sorted. Symlinked folders are followed,
+    but each real folder only once, so a link loop can't repeat or hang it."""
+    found, visited = [], set()
+    for root, dirs, names in os.walk(base, followlinks=True):
+        real = os.path.realpath(root)
+        if real in visited:
+            dirs[:] = []
+            continue
+        visited.add(real)
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        found += [os.path.join(root, n) for n in names if n.endswith(".desktop") and not n.startswith(".")]
+    return sorted(found)
+
+
 def apps():
-    seen, result = set(), []
+    seen, seen_real, result = set(), set(), []
     desktop = set(filter(None, (os.environ.get("XDG_CURRENT_DESKTOP") or "KDE").split(":")))
     for d in data_dirs():
         base = os.path.join(d, "applications")
-        for path in sorted(glob.glob(os.path.join(base, "**", "*.desktop"), recursive=True)):
+        for path in desktop_files(base):
             did = os.path.relpath(path, base).replace("/", "-")
             if did in seen:
                 continue
             seen.add(did)  # the first one found wins, as the spec says
+            real = os.path.realpath(path)
+            if real in seen_real:       # the same file reached a second way
+                continue
+            seen_real.add(real)
             e = read_desktop(path)
             if not e or e.get("Type") != "Application":
                 continue
@@ -184,8 +256,17 @@ def apps():
     return result
 
 
+def valid_id(did):
+    """A desktop file id is a plain name like org.kde.dolphin.desktop: no
+    folders, not hidden, nothing that could point outside applications/."""
+    return bool(did) and "/" not in did and "\0" not in did and not did.startswith(".") \
+        and did.endswith(".desktop")
+
+
 def desktop_path(did):
     """Where the .desktop file for an app id lives (first match wins, as in the spec)."""
+    if not valid_id(did):
+        return None
     for d in data_dirs():
         base = os.path.join(d, "applications")
         path = os.path.join(base, did)
@@ -201,36 +282,40 @@ def desktop_path(did):
 
 
 def try_run(cmd):
-    """Start cmd detached; True if it started and didn't fail straight away."""
-    if not shutil.which(cmd[0]):
+    """Start a launcher detached, without waiting for it. True if it started.
+    Once a launcher has started it owns the launch: we never try the next one
+    as well, whatever it exits with. Otherwise an app could start twice, or
+    a declined "run this untrusted program?" prompt from KIO would be
+    bypassed by the next launcher simply running it."""
+    tool = shutil.which(cmd[0])
+    if not tool:
         return False
     try:
-        proc = subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([tool] + cmd[1:], start_new_session=True, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
         return False
-    try:
-        return proc.wait(timeout=3) == 0      # launchers hand off and exit quickly
-    except subprocess.TimeoutExpired:
-        return True                           # still running: it's the app itself
+    return True
 
 
 def launch(did):
     """Start a new copy of an app, every time, the way Plasma's own menu does."""
+    if not valid_id(did):
+        return
     path = desktop_path(did)
-    if path and try_run(["kioclient", "exec", path]):   # KDE's app launcher (same as Kickoff)
+    if not path:
+        return
+    if try_run(["kioclient", "exec", path]):   # KDE's app launcher (same as Kickoff)
         return
     if try_run(["gtk-launch", did]):
         return
-    if path and try_run(["gio", "launch", path]):
+    if try_run(["gio", "launch", path]):
         return
     # Last resort: run the Exec line ourselves, read by the desktop-file rules
     # (quoting, escapes, %f/%u dropped, %i/%c/%k filled in), as app actions are.
-    e = read_desktop(path) if path else None
+    e = read_desktop(path)
     if e and e.get("Exec"):
-        args = exec_args(e["Exec"], e, path)
-        if args and shutil.which(args[0]):
-            subprocess.Popen(args, start_new_session=True, cwd=e.get("Path") or HOME,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        spawn(exec_args(e["Exec"], e, path), e.get("Path", ""))
 
 
 def open_url(url):
@@ -245,6 +330,30 @@ def pretty_dir(path):
     return "~" + d[len(HOME):] if d.startswith(HOME) else d
 
 
+# Filesystems that may live on another machine: a stat() there can hang for
+# a long time when the server or the network is gone.
+REMOTE_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "sshfs", "fuse", "9p", "afs", "ceph",
+             "glusterfs", "davfs", "curlftpfs", "ncpfs")
+
+
+def remote_mounts():
+    """Mount points of network and FUSE filesystems (from /proc/self/mounts)."""
+    points = []
+    for line in read("/proc/self/mounts").splitlines():
+        f = line.split()
+        if len(f) >= 3 and (f[2] in REMOTE_FS or f[2].split(".")[0] in REMOTE_FS):
+            points.append(f[1].replace("\\040", " "))
+    return points
+
+
+def maybe_remote(path, mounts):
+    """True for paths we won't stat(): removable/network places and FUSE
+    mounts such as gvfs (/run/user/1000/gvfs/...)."""
+    if re.match(r"^/(media|mnt|net|run/media)(/|$)", path) or re.match(r"^/run/user/[^/]+/(gvfs|doc)(/|$)", path):
+        return True
+    return any(path == m or path.startswith(m.rstrip("/") + "/") for m in mounts if m != "/")
+
+
 def recent(limit=20):
     xbel = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share"), "recently-used.xbel")
     items = []
@@ -252,18 +361,27 @@ def recent(limit=20):
         root = ET.parse(xbel).getroot()
     except Exception:
         return []
+    mounts = remote_mounts()
+    budget = time.monotonic() + 2                  # never spend long checking files
     for b in root.iter("bookmark"):
         href = b.get("href", "")
         if not href.startswith("file://"):
             continue
         path = urllib.parse.unquote(href[7:])
-        if not os.path.exists(path):
-            continue
+        # Local files: check they're still there. Remote ones (or once we've
+        # used up our time): trust the list, and ask it whether it's a folder.
+        if not maybe_remote(path, mounts) and time.monotonic() < budget:
+            if not os.path.exists(path):
+                continue
+            folder = os.path.isdir(path)
+        else:
+            folder = href.endswith("/") or any(
+                (m.get("type") or "") == "inode/directory" for m in b.iter() if m.tag.endswith("mime-type"))
         items.append({
             "name": os.path.basename(path.rstrip("/")) or path,
             "dir": pretty_dir(path),
             "url": href,
-            "folder": os.path.isdir(path),
+            "folder": folder,
             "when": b.get("modified") or b.get("visited") or b.get("added") or "",
         })
     items.sort(key=lambda i: i["when"], reverse=True)
@@ -496,22 +614,24 @@ def main():
         out(media())
     elif cmd == "media-cmd":
         media_cmd(arg)
-    elif cmd == "launch":
+    elif cmd == "launch" and valid_id(arg):
         launch(arg)
-    elif cmd == "action" and len(sys.argv) == 4:
+    elif cmd == "action" and len(sys.argv) == 4 and valid_id(sys.argv[2]):
         launch_action(sys.argv[2], sys.argv[3])
     elif cmd == "open":
         open_url(arg)
     elif cmd == "taskbar-pins":
         out(taskbar_pins())
-    elif cmd == "taskbar-pin":
+    elif cmd == "taskbar-pin" and valid_id(arg):
         taskbar_pin(arg, True)
-    elif cmd == "taskbar-unpin":
+    elif cmd == "taskbar-unpin" and valid_id(arg):
         taskbar_pin(arg, False)
     elif cmd == "session":
         session(arg)
     else:
-        sys.stderr.write("usage: menu.py apps|recent|files Q|stats|media|media-cmd M|launch ID|action ID ACTION|open URL|session WHAT\n")
+        sys.stderr.write("usage: menu.py apps | recent | files Q | stats | media | media-cmd M | launch ID"
+                         " | action ID ACTION | open URL | taskbar-pins | taskbar-pin ID | taskbar-unpin ID"
+                         " | session WHAT\n")
         sys.exit(2)
 
 

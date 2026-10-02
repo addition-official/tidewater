@@ -3,12 +3,17 @@
 // Start button and start menu.
 // The Meta key opens it (metadata: X-Plasma-Provides launchermenu).
 // All system access goes through ../code/menu.py.
+// It also keeps Tidewater's settings for every other Tidewater widget: see
+// "Tidewater settings" below, and shared/Settings.qml.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import "common"
 import "shared"
+// ~/.local/share/tidewater/qml (install.sh puts it there): the same folder
+// for every widget, so they all share one Settings object.
+import "../../../../../tidewater/qml"
 
 PlasmoidItem {
     id: root
@@ -31,12 +36,17 @@ PlasmoidItem {
     }
     readonly property string base: "python3 " + exec.q(helper) + " "
     function py(args) { exec.run(base + args); }
+    // for things the user asked for: never skipped, even if the same one still runs
+    function pyNow(args) { exec.start(base + args); }
 
     Exec {
         id: exec
         onFinished: (cmd, out, code) => {
             if (!cmd.startsWith(root.base)) return;
             const rest = cmd.substring(root.base.length);
+            // the query this files search was for (dropped even if the output is bad)
+            const q = root.filesQuery[cmd];
+            delete root.filesQuery[cmd];
             let data = null;
             try { data = JSON.parse(out); } catch (e) { return; }
             if (rest === "apps") root.apps = data;
@@ -46,8 +56,6 @@ PlasmoidItem {
             else if (rest === "taskbar-pins") root.taskbarPins = data;
             else if (rest.startsWith("files ")) {
                 // tag results with the query they were for, not whatever is typed now
-                const q = root.filesQuery[cmd];
-                delete root.filesQuery[cmd];
                 if (q !== undefined) root.fileResults = { q: q, items: data };
             }
         }
@@ -59,7 +67,10 @@ PlasmoidItem {
     property double shownAt: 0          // when the panel button last appeared
     property bool settled: false        // set when the deferred open fires
     Timer { id: settleOpen; onTriggered: { root.settled = true; root.expanded = true; } }
-    Component.onDestruction: Launchers.remove(root)
+    Component.onDestruction: {
+        Launchers.remove(root);
+        Settings.removeOwner(root);
+    }
     onExpandedChanged: {
         if (!expanded) return;
         if (onScreen()) {
@@ -69,8 +80,13 @@ PlasmoidItem {
             const early = 1500 - (Date.now() - shownAt);
             if (early > 0 && !settled) {
                 expanded = false;
-                settleOpen.interval = early;
-                settleOpen.restart();
+                // asked again while waiting: that is a second click, so close
+                if (settleOpen.running) {
+                    settleOpen.stop();
+                } else {
+                    settleOpen.interval = early;
+                    settleOpen.start();
+                }
                 return;
             }
             settled = false;
@@ -89,7 +105,12 @@ PlasmoidItem {
     }
 
     function refreshAll() { py("apps"); py("recent"); py("stats"); py("media"); py("taskbar-pins"); }
-    Component.onCompleted: { Launchers.add(root); py("apps"); py("stats"); }
+    Component.onCompleted: {
+        Launchers.add(root);
+        py("apps");
+        py("stats");
+        startSettings();
+    }
     Timer {
         interval: 2000
         running: root.expanded
@@ -99,12 +120,12 @@ PlasmoidItem {
 
     // ---- actions --------------------------------------------------------------
     function close() { root.expanded = false; }
-    function launch(id) { py("launch " + exec.q(id)); close(); }
+    function launch(id) { pyNow("launch " + exec.q(id)); close(); }
     // one of the app's own actions, e.g. a browser's "New private window"
-    function launchAction(id, action) { py("action " + exec.q(id) + " " + exec.q(action)); close(); }
-    function openUrl(url) { py("open " + exec.q(url)); close(); }
-    function session(what) { close(); py("session " + exec.q(what)); }
-    function mediaCmd(m) { py("media-cmd " + m); mediaSettle.restart(); }
+    function launchAction(id, action) { pyNow("action " + exec.q(id) + " " + exec.q(action)); close(); }
+    function openUrl(url) { pyNow("open " + exec.q(url)); close(); }
+    function session(what) { close(); pyNow("session " + exec.q(what)); }
+    function mediaCmd(m) { pyNow("media-cmd " + exec.q(m)); mediaSettle.restart(); }
     Timer { id: mediaSettle; interval: 400; onTriggered: root.py("media") }
 
     property string pendingFiles: ""
@@ -222,6 +243,104 @@ PlasmoidItem {
         return d > 0 ? "up " + d + " d " + h + " h" : "up " + h + " h " + (m < 10 ? "0" : "") + m + " min";
     }
 
+    // ---- Tidewater settings ----------------------------------------------------
+    // This widget's configuration is where Tidewater's settings are saved (the
+    // settings page, ConfigGeneral.qml, is this widget's Configure dialog).
+    // Saved settings go into the shared Settings object, and newer ones from
+    // there (another start widget, e.g. on a second monitor) come back into
+    // this widget's configuration, so every copy ends up the same.
+    readonly property real savedRev: Number(Plasmoid.configuration.settingsRev) || 0
+    // Every option as saved here: changes whenever one of them does.
+    readonly property var saved: {
+        const c = Plasmoid.configuration;
+        const out = {};
+        for (const k of Settings.keys)
+            out[k] = c[k];
+        return out;
+    }
+    // Set while this widget writes settings into its own configuration, so
+    // those writes are not handed straight back (no ping-pong).
+    property bool adopting: false
+    onSavedChanged: if (!adopting) Qt.callLater(pushSettings)
+    onSavedRevChanged: if (!adopting) Qt.callLater(pushSettings)
+
+    function startSettings() {
+        Settings.addOwner(root);
+        pushSettings();
+        // Never saved: move the taskbar's and clock's old settings over, once
+        // they have handed them in (they start at about the same time), or
+        // after a short wait if one of them isn't there.
+        if (savedRev === 0 && Settings.rev === 0) {
+            if (Settings.legacy.tasks && Settings.legacy.clock)
+                migrateLegacy();
+            else
+                migrateWait.start();
+        }
+    }
+    function pushSettings() {
+        if (!Settings.offer(saved, savedRev) || Settings.rev > savedRev)
+            adoptSettings();
+    }
+    // Newer settings arrived (from another start widget): save them here too.
+    function adoptSettings() {
+        if (Settings.rev <= savedRev)
+            return;
+        const v = Settings.values();
+        adopting = true;
+        for (const k of Settings.keys)
+            if (Plasmoid.configuration[k] !== v[k])
+                Plasmoid.configuration[k] = v[k];
+        Plasmoid.configuration.settingsRev = String(Settings.rev);
+        adopting = false;
+    }
+    Connections {
+        target: Settings
+        function onRevChanged() { root.adoptSettings(); }
+        function onLegacyChanged() {
+            if (migrateWait.running && Settings.legacy.tasks && Settings.legacy.clock) {
+                migrateWait.stop();
+                root.migrateLegacy();
+            }
+        }
+    }
+
+    // One time: the taskbar and the clock used to keep their options in their
+    // own settings. Take those over, save them here, and share them.
+    Timer {
+        id: migrateWait
+        interval: 2500
+        onTriggered: root.migrateLegacy()
+    }
+    function migrateLegacy() {
+        // another start widget may have done it (or had settings) meanwhile
+        if (savedRev > 0 || Settings.rev > 0) {
+            adoptSettings();
+            return;
+        }
+        const v = Object.assign({}, saved);
+        for (const kind in Settings.legacyKeys) {
+            const old = Settings.legacy[kind];
+            if (!old)
+                continue;
+            for (const k of Settings.legacyKeys[kind])
+                if (old[k] !== undefined && old[k] !== null)
+                    v[k] = old[k];
+        }
+        const when = Date.now();
+        adopting = true;
+        for (const k of Settings.keys) {
+            v[k] = Settings.clean(k, v[k]);
+            if (Plasmoid.configuration[k] !== v[k])
+                Plasmoid.configuration[k] = v[k];
+        }
+        Plasmoid.configuration.settingsRev = String(when);
+        adopting = false;
+        Settings.offer(v, when);
+    }
+
+    // Other widgets' "Tidewater settings..." comes here (see Settings.openSettings).
+    function openSettingsPage() { Plasmoid.internalAction("configure").trigger(); }
+
     // ---- in the panel -------------------------------------------------------------
     compactRepresentation: Item {
         Layout.minimumWidth: button.implicitWidth
@@ -236,13 +355,17 @@ PlasmoidItem {
             onShownChanged: if (shown) root.shownAt = Date.now()
             anchors.centerIn: parent
             pal: design
-            // closed: grey pill with a blue icon, hover like the Search pill; open: solid blue
+            // closed: gray pill with a blue icon, hover like the Search pill; open: solid blue
             accent: root.expanded
             accentGlyph: true
             filled: true
             active: root.expanded
             size: Math.max(24, Math.round(46 * design.unit))
-            glyph: "blur_on"
+            // Settings: the built-in glyph, or an icon or picture of your own
+            glyph: Settings.startIcon ? "" : "blur_on"
+            image: Settings.iconSource(Settings.startIcon)
+            // theme icons follow the button's colors; pictures are shown as they are
+            imageTinted: !Settings.isFile(Settings.startIcon)
             fallback: "start-here-kde-symbolic"
             onClicked: root.expanded = !root.expanded
         }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The start menu, two panes (928 x 668):
+// The start menu, three panes (928 x 668):
 // a category rail, search with pinned apps and recent files, and a side
-// column with the user, what's playing, system meters and session buttons.
+// column with the user, what's playing, system meters and a power button.
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
@@ -456,7 +456,7 @@ Item {
                     sm.selected = 0;
                     sm.app.searchFiles(text);
                 }
-                Keys.onDownPressed: sm.selected = Math.min(sm.results.length - 1, sm.selected + 1)
+                Keys.onDownPressed: sm.selected = Math.max(0, Math.min(sm.results.length - 1, sm.selected + 1))
                 Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
                 Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
                 Keys.onEnterPressed: sm.activate(sm.results[sm.selected])

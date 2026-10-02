@@ -35,6 +35,7 @@ function makePanel(align, fit) {
 // Lists (pinned apps) must stay arrays: a comma-joined string would be stored
 // as a single item.
 if (typeof KEEP === "undefined") var KEEP = {};
+if (typeof PREV_STYLE === "undefined") var PREV_STYLE = "";
 
 function add(panel, plugin) {
     var w = panel.addWidget(plugin);
@@ -58,7 +59,22 @@ function spacer(panel) {
 }
 
 function left(panel) {
-    add(panel, P + ".start");
+    // The start widget keeps Tidewater's settings (see shared/Settings.qml).
+    var s = add(panel, P + ".start");
+    if (s) {
+        s.currentConfigGroup = ["General"];
+        // The taskbar fills the bar, so icons can sit left or center, except
+        // with islands (its own small panel). A rebuild in a non-islands style
+        // keeps the "fill the bar" choice carried over from the settings page;
+        // switching to or from islands sets it to what that style needs.
+        var kept = KEEP[P + ".start"] && KEEP[P + ".start"].expand !== undefined;
+        var sameKind = PREV_STYLE !== "" && (PREV_STYLE === "islands") === (STYLE === "islands");
+        if (STYLE === "islands" || !kept || !sameKind)
+            s.writeConfig("expand", STYLE !== "islands");
+        // Saved now: newer than any other start widget's settings, so these
+        // (carried over from the old panel) are the ones every widget uses.
+        s.writeConfig("settingsRev", String(Date.now()));
+    }
     add(panel, P + ".search");
     add(panel, P + ".taskview");
     add(panel, P + ".divider");
@@ -69,7 +85,9 @@ function middle(panel, expand) {
     var t = add(panel, P + ".tasks");
     if (!t) return;
     t.currentConfigGroup = ["General"];
-    t.writeConfig("expand", expand);   // fills the bar, so icons can sit left or centre
+    // fills the bar, so icons can sit left or center (now a Tidewater setting,
+    // kept by the start widget: this copy is only for older versions)
+    t.writeConfig("expand", expand);
 }
 
 function right(panel) {

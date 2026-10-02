@@ -9,7 +9,13 @@
 #   bash helper.sh status          # prints the JSON the widget draws from
 #   bash helper.sh wifi off        # any command below works by hand too
 #
-# Nothing here uses sudo, the network, or any file outside your own config.
+# Commands: status | wifi on|off | bluetooth on|off | dnd on|off | mic |
+#   nightlight | brightness 0-100 | watch-audio | power |
+#   open systemsettings [kcm_name] |
+#   volume 0-100 | mute | lock   (the last three are for use by hand: the
+#   widget talks to PipeWire directly for volume)
+#
+# Nothing here uses sudo or the network, or writes anywhere but your own config.
 
 set -u
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -27,6 +33,13 @@ js() {
 # array subscripts in arithmetic, so untrusted text there can run commands.)
 isnum() { [[ ${1-} =~ ^[0-9]+$ ]]; }
 jb() { [ "$1" = 1 ] && printf true || printf false; }
+# The on/off argument of a switch; anything else (or nothing) is a usage error.
+onoff() {
+    case ${1-} in
+        on|off) printf '%s' "$1" ;;
+        *) echo "usage: helper.sh $cmd on|off" >&2; exit 2 ;;
+    esac
+}
 
 prop() { busctl --user get-property "$@" 2>/dev/null; }
 
@@ -177,15 +190,17 @@ shift || true
 case $cmd in
     status) status ;;
     wifi)                                                 # on | off
-        if [ "$1" = on ]; then
+        want=$(onoff "${1-}") || exit 2
+        if [ "$want" = on ]; then
             # clear a soft block too (Plasma's airplane mode / Wi-Fi switch sets one)
             rfkill unblock wlan 2>/dev/null || true
             nmcli radio wifi on
         else
             nmcli radio wifi off
         fi ;;
-    bluetooth)
-        if [ "$1" = on ]; then
+    bluetooth)                                            # on | off
+        want=$(onoff "${1-}") || exit 2
+        if [ "$want" = on ]; then
             rfkill unblock bluetooth 2>/dev/null
             timeout 4 bluetoothctl power on
         else
@@ -209,7 +224,8 @@ case $cmd in
         busctl --user call org.kde.kglobalaccel /component/kwin \
             org.kde.kglobalaccel.Component invokeShortcut s "Toggle Night Color" ;;
     dnd)                                                  # on | off
-        if [ "$1" = on ]; then
+        want=$(onoff "${1-}") || exit 2
+        if [ "$want" = on ]; then
             kwriteconfig6 --file plasmanotifyrc --group DoNotDisturb --key Until --notify "2099,12,31,23,59,59"
         else
             kwriteconfig6 --file plasmanotifyrc --group DoNotDisturb --key Until --notify --delete
@@ -219,15 +235,45 @@ case $cmd in
         # apps, a new default device), so the widget can update at once.
         # Exit 3 = pactl isn't available; the widget then polls instead.
         command -v pactl >/dev/null 2>&1 || exit 3
+        # The widget starts us again right after each "hit". If PipeWire keeps
+        # reporting changes (it can, during playback), don't let that turn into
+        # a busy loop: at most one hit a second. We listen straight away (so no
+        # change is missed) and only hold back the report. The time of the
+        # last hit is kept in a private file of our own.
+        wdir=${XDG_RUNTIME_DIR:-}
+        [ -n "$wdir" ] && [ -d "$wdir" ] && [ -O "$wdir" ] || wdir=${XDG_CACHE_HOME:-$HOME/.cache}/tidewater
+        ( umask 077; mkdir -p "$wdir" ) 2>/dev/null
+        stamp=$wdir/tidewater-watch
         # In its own process group, so "kill 0" only ends this little pipeline,
         # and timeout inside it, so on timeout the whole group (pactl too) goes.
         # Prints "hit" when a real change arrived (vs. a timeout or failure).
         # "sink #" / "server" only: not sink-input, i.e. not apps opening streams.
-        setsid -w timeout 120 bash -c \
+        res=$(setsid -w timeout 120 bash -c \
             'pactl subscribe 2>/dev/null | { grep -m1 -qE "on (sink #|server)" && echo hit; kill 0; }' \
-            2>/dev/null
+            2>/dev/null)
+        if [ "$res" = hit ]; then
+            last=""
+            [ -f "$stamp" ] && [ ! -L "$stamp" ] && read -r last <"$stamp" 2>/dev/null
+            now=$(date +%s%3N)                 # milliseconds
+            if isnum "$last" && isnum "$now" && [ $(( now - last )) -lt 1000 ]; then
+                sleep "$(printf '0.%03d' $(( 1000 - (now - last) )))"
+            fi
+            # remember when, in a private file (never follow a planted link)
+            ( umask 077; [ -L "$stamp" ] || date +%s%3N >"$stamp" ) 2>/dev/null
+            echo hit
+        fi
         exit 0 ;;
-    open) setsid -f "$@" >/dev/null 2>&1 ;;               # launch a settings page
+    open)                                  # open systemsettings [kcm_name]
+        # Only System Settings, optionally on one of its pages: never any
+        # other program, whatever the caller passes.
+        [ "${1-}" = systemsettings ] || { echo "usage: helper.sh open systemsettings [kcm_name]" >&2; exit 2; }
+        if [ $# -eq 1 ]; then
+            setsid -f systemsettings >/dev/null 2>&1
+        elif [ $# -eq 2 ] && [[ $2 =~ ^kcm_[a-z0-9_]+$ ]]; then
+            setsid -f systemsettings "$2" >/dev/null 2>&1
+        else
+            echo "usage: helper.sh open systemsettings [kcm_name]" >&2; exit 2
+        fi ;;
     power) busctl --user call org.kde.LogoutPrompt /LogoutPrompt org.kde.LogoutPrompt promptAll ;;
     lock) loginctl lock-session ;;
     *) echo "unknown command: $cmd" >&2; exit 2 ;;

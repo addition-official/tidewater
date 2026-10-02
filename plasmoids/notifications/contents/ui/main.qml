@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// Bell and notification centre:
+// Bell and notification center:
 // one card per app (newest first), a count badge, "N more" to expand,
 // Do not disturb and Clear all. History comes from Plasma's own
 // notification server; Plasma still draws the pop-ups themselves.
@@ -11,11 +11,26 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import org.kde.notificationmanager as NotificationManager
 import "common"
+import "shared"
+// ~/.local/share/tidewater/qml (install.sh puts it there): Tidewater's
+// settings, shared by every Tidewater widget.
+import "../../../../../tidewater/qml"
 
 PlasmoidItem {
     id: root
     preferredRepresentation: compactRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
+
+    // Right-click > "Tidewater settings...": opens the start button's settings
+    // page, where all of Tidewater is set up (hidden without a start button).
+    Plasmoid.contextualActions: [
+        PlasmaCore.Action {
+            text: "Tidewater settings..."
+            icon.name: "configure"
+            visible: Settings.canOpen
+            onTriggered: Settings.openSettings()
+        }
+    ]
     Palette { id: design }
 
     NotificationManager.Settings {
@@ -53,10 +68,21 @@ PlasmoidItem {
         onCountChanged: rebuild.restart()
         onDataChanged: rebuild.restart()
         Component.onCompleted: {
-            const saved = Plasmoid.configuration.lastRead;
-            if (saved) lastRead = new Date(saved);
+            ReadMark.offer(Plasmoid.configuration.lastRead);
+            root.applyLastRead();
             rebuild.restart();
         }
+    }
+    // Read on any copy of this widget (another monitor) counts as read here.
+    function applyLastRead() {
+        const t = ReadMark.lastRead;
+        if (!t) return;
+        history.lastRead = new Date(t);
+        if (Plasmoid.configuration.lastRead !== t) Plasmoid.configuration.lastRead = t;
+    }
+    Connections {
+        target: ReadMark
+        function onLastReadChanged() { root.applyLastRead(); }
     }
     readonly property int unseen: history.unreadNotificationsCount
 
@@ -137,8 +163,7 @@ PlasmoidItem {
         if (expanded) {
             root.now = Date.now();
         } else {
-            history.lastRead = new Date();
-            Plasmoid.configuration.lastRead = new Date().toISOString();
+            ReadMark.lastRead = new Date().toISOString();
         }
     }
 
@@ -165,7 +190,6 @@ PlasmoidItem {
                 else root.expanded = !root.expanded;
             }
             Rectangle {
-                readonly property bool counting: root.unseen > 0
                 visible: root.unseen > 0 && !root.expanded && !root.quiet
                 x: bell.width - width - Math.round(bell.width * 0.08)
                 y: Math.round(bell.height * 0.08)
@@ -188,7 +212,7 @@ PlasmoidItem {
         }
     }
 
-    // ---- the centre -------------------------------------------------------------
+    // ---- the center -------------------------------------------------------------
     component TextButton: Rectangle {
         id: tb
         property string text
@@ -378,11 +402,11 @@ PlasmoidItem {
         Layout.preferredWidth: 424
         Layout.minimumWidth: 424
         Layout.maximumWidth: 424
-        Layout.preferredHeight: centre.implicitHeight + 40
+        Layout.preferredHeight: center.implicitHeight + 40
         Layout.minimumHeight: Layout.preferredHeight
 
         Column {
-            id: centre
+            id: center
             x: 20
             y: 20
             width: parent.width - 40

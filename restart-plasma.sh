@@ -6,10 +6,12 @@
 # settings. Works however Plasma was started: through systemd or not.
 #
 #   ./restart-plasma.sh          restart
-#   ./restart-plasma.sh stop     stop only (used by tidy-tray.sh)
+#   ./restart-plasma.sh stop     stop only (used by tidy-tray.sh and uninstall.sh)
 #   ./restart-plasma.sh start    start only
 
 set -u
+die() { printf '\033[1;31mxx\033[0m  %s\n' "$*" >&2; exit 1; }
+[ "$(id -u)" != 0 ] || die "Run this as your normal user, not with sudo."
 
 running() { pgrep -u "$(id -u)" -x plasmashell >/dev/null; }
 
@@ -43,5 +45,6 @@ start_plasma() {
 case "${1:-restart}" in
     stop) stop_plasma ;;
     start) start_plasma ;;
-    *) stop_plasma; start_plasma ;;
+    # if Plasma won't stop, starting it again would do nothing: say so
+    *) stop_plasma || die "Plasma didn't stop, so it wasn't restarted."; start_plasma ;;
 esac

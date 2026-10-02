@@ -7,6 +7,9 @@
     <entry name="launchers" type="StringList">
       <default>applications:org.kde.dolphin.desktop,applications:org.kde.kate.desktop,applications:org.kde.konsole.desktop,preferred://browser</default>
     </entry>
+    <!-- From before Tidewater's settings moved to the start widget: no longer
+         used for the look, only handed over once (and carried over by
+         install.sh) so older settings are not lost. -->
     <entry name="alignment" type="String"><default>center</default></entry>
     <entry name="iconSize" type="Int"><default>28</default></entry>
     <entry name="expand" type="Bool"><default>true</default></entry>

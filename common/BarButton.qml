@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// Bar button: plain, filled (grey pill), or accent (blue),
-// sized from the bar thickness exactly as in the original.
+// Bar button: plain, filled (gray pill), or accent (blue),
+// sized in proportion to the bar thickness.
 import QtQuick
+import org.kde.kirigami as Kirigami
 
 Item {
     id: b
@@ -17,6 +18,11 @@ Item {
     property bool accentGlyph: false   // blue icon on a plain button (start button while closed)
     property string glyph
     property string fallback
+    // An icon theme name or picture address, shown when there is no glyph.
+    // Tinted: drawn in the button's colors (theme icons that support it);
+    // otherwise shown in its own colors.
+    property string image
+    property bool imageTinted: true
     property string text
     property real size: Math.max(22, Math.round(44 * pal.unit))
     property real glyphSize: Math.max(16, Math.round(20 * pal.unit))
@@ -58,6 +64,14 @@ Item {
             color: b.contentColor
             fontAvailable: b.pal.hasIconFont
         }
+        Kirigami.Icon {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: b.glyph.length === 0 && b.image.length > 0
+            width: Math.round(b.glyphSize * 1.15)
+            height: width
+            source: b.image
+            color: b.imageTinted ? b.contentColor : "transparent"
+        }
         Text {
             anchors.verticalCenter: parent.verticalCenter
             visible: b.text.length > 0
@@ -71,8 +85,12 @@ Item {
     MouseArea {
         id: area
         anchors.fill: parent
+        // buttons: Qt.NoButton makes it just a picture (e.g. a preview):
+        // no hover highlight, no hand cursor
+        enabled: b.buttons !== Qt.NoButton
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
+        // set explicitly: a disabled MouseArea still applies its cursor
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: b.buttons
         onClicked: mouse => b.clicked(mouse)
         onWheel: wheel => b.wheel(wheel)

@@ -8,11 +8,25 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import "common"
+// ~/.local/share/tidewater/qml (install.sh puts it there): Tidewater's
+// settings, shared by every Tidewater widget.
+import "../../../../../tidewater/qml"
 
 PlasmoidItem {
     id: root
     preferredRepresentation: compactRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
+
+    // Right-click > "Tidewater settings...": opens the start button's settings
+    // page, where all of Tidewater is set up (hidden without a start button).
+    Plasmoid.contextualActions: [
+        PlasmaCore.Action {
+            text: "Tidewater settings..."
+            icon.name: "configure"
+            visible: Settings.canOpen
+            onTriggered: Settings.openSettings()
+        }
+    ]
 
     Palette { id: design }
 
@@ -99,7 +113,11 @@ PlasmoidItem {
             if (cmd.endsWith(" status")) {
                 let next;
                 try { next = JSON.parse(out); }
-                catch (e) { console.warn("tidewater: could not read status:", out); return; }
+                catch (e) {
+                    // not the output itself: it holds user and network names
+                    console.warn("tidewater: could not read status (" + String(out).length + " characters): " + e.message);
+                    return;
+                }
                 root.absorb(next);
             } else if (cmd === root.volGet) {
                 const m = /Volume:\s*([0-9.]+)/.exec(out);
@@ -200,6 +218,7 @@ PlasmoidItem {
                 readonly property real glyph: Math.max(16, Math.round(20 * design.unit))
                 Glyph {
                     name: root.netGlyph; fallback: "network-wireless-symbolic"
+                    svg: root.st.ethOn ? "ethernet" : ""
                     size: icons.glyph; color: design.fg; fontAvailable: design.hasIconFont
                 }
                 Glyph {
@@ -223,12 +242,21 @@ PlasmoidItem {
                     if (mouse.button === Qt.MiddleButton) root.toggleMute();
                     else root.expanded = !root.expanded;
                 }
+                // Touchpads send many small steps: add them up and change the
+                // volume by 5% for each full notch (120), starting over when
+                // the direction changes.
+                property real wheelAcc: 0
                 onWheel: wheel => {
-                    if (!root.ready || root.st.vol < 0) return;
+                    const d = wheel.angleDelta.y;
+                    if (!root.ready || root.st.vol < 0 || d === 0) return;
+                    if ((wheelAcc > 0) !== (d > 0)) wheelAcc = 0;
+                    wheelAcc += d;
+                    const n = Math.trunc(wheelAcc / 120);   // whole notches only
+                    if (n === 0) return;
+                    wheelAcc -= n * 120;
                     // above 100% (set elsewhere), scrolling up must not pull it down to 100
-                    if (wheel.angleDelta.y > 0 && root.st.vol >= 100) return;
-                    if (wheel.angleDelta.y === 0) return;
-                    root.setVolume(root.st.vol + (wheel.angleDelta.y > 0 ? 5 : -5));
+                    if (n > 0 && root.st.vol >= 100) return;
+                    root.setVolume(root.st.vol + 5 * n);
                 }
             }
         }
@@ -358,7 +386,8 @@ PlasmoidItem {
                 Tile {
                     pal: design
                     title: "Ethernet"
-                    glyph: root.st.ethOn ? "settings_ethernet" : "lan"
+                    glyph: "lan"
+                    svg: "ethernet"   // Tidewater's own drawing (see common/Glyph.qml)
                     fallback: "network-wired-symbolic"
                     hasPage: true
                     available: !!root.st.ethHw
