@@ -1,0 +1,10 @@
+# Python bytecode (from running menu.py)
+__pycache__/
+*.py[cod]
+
+# editors and desktops
+*~
+*.swp
+.directory
+.vscode/
+.idea/
