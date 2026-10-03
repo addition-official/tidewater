@@ -4,7 +4,6 @@
 // pill, a short accent bar under it, a dot per open window under the others.
 // Window data comes from Plasma's own task model (the one its taskbar uses).
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
@@ -298,20 +297,17 @@ PlasmoidItem {
         flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
         location: Plasmoid.location
         visualParent: root.hoveredTask
-        // We draw the card ourselves (below) so it gets round corners whatever
-        // the Plasma theme does. Without the theme's frame KWin adds no shadow
-        // or blur, so the card brings its own shadow.
-        backgroundHints: PlasmaCore.Dialog.NoBackground
+        // Plasma's own frame (with KWin's shadow and blur). A card drawn by
+        // hand on a frameless (NoBackground) popup never showed up on Wayland.
+        backgroundHints: PlasmaCore.Dialog.StandardBackground
         visible: false
         onVisibleChanged: if (!visible)
             root.cardByClick = false
 
         mainItem: Item {
             id: cardWindow
-            // room around the card for its shadow
-            readonly property int shadowPad: 14
-            width: card.width + 2 * shadowPad
-            height: card.height + 2 * shadowPad
+            width: card.width
+            height: card.height
             HoverHandler {
                 id: cardHover
                 onHoveredChanged: if (!hovered)
@@ -320,42 +316,10 @@ PlasmoidItem {
                     closeTimer.stop()
             }
 
-            // The shadow: a soft copy of the card's shape, drawn under the card
-            // (the card covers the shape itself). If effects can't run, only
-            // the shadow is missing.
-            Rectangle {
-                id: cardShape
-                anchors.fill: card
-                radius: cardBackground.radius
-                color: design.surface
-                visible: false
-            }
-            MultiEffect {
-                anchors.fill: cardShape
-                source: cardShape
-                shadowEnabled: true
-                shadowBlur: 1.0
-                blurMax: 24
-                shadowVerticalOffset: 2
-                shadowColor: Qt.rgba(0, 0, 0, design.dark ? 0.55 : 0.22)
-            }
-
             Item {
                 id: card
-                x: cardWindow.shadowPad
-                y: cardWindow.shadowPad
                 width: Math.min(root.cardMaxWidth, Math.max(header.implicitWidth, cells.implicitWidth) + 28)
                 height: header.height + cells.height + 38
-
-                Rectangle {
-                    id: cardBackground
-                    objectName: "cardBackground"
-                    anchors.fill: parent
-                    radius: 12
-                    color: design.surface
-                    border.width: 1
-                    border.color: design.out
-                }
 
                 Row {
                     id: header
