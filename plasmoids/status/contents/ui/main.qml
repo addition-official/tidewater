@@ -63,8 +63,9 @@ PlasmoidItem {
         pal: design
         active: root.volumeHost && Settings.volumePopup
         showNumber: Settings.volumeNumber
-        knownVol: root.st.vol !== undefined ? root.st.vol : -1
-        knownMuted: !!root.st.muted
+        live: root.live
+        knownVol: root.volNow
+        knownMuted: root.mutedNow
         screenGeometry: Plasmoid.containment ? Plasmoid.containment.screenGeometry : Qt.rect(0, 0, 0, 0)
         freeArea: Plasmoid.containment ? Plasmoid.containment.availableScreenRect : Qt.rect(0, 0, 0, 0)
     }
@@ -115,7 +116,20 @@ PlasmoidItem {
         root.expanded = false;
     }
 
-    // ---- volume: straight to PipeWire, no helper, no waiting -------------------
+    // ---- volume ---------------------------------------------------------------
+    // Live from Plasma's own volume module (LiveVolume.qml), like Plasma's
+    // volume popup: every change shows at once, even a knob spun fast. Without
+    // that module, the wpctl code below takes over (slower: it learns about
+    // changes through a listener that reports at most once a second).
+    Loader { id: liveLoader; source: "LiveVolume.qml" }
+    readonly property var live: liveLoader.item && liveLoader.item.ok ? liveLoader.item : null
+    // what the bar, icon and tooltip show
+    readonly property int volNow: live ? live.percent : (st.vol === undefined ? -1 : st.vol)
+    readonly property bool mutedNow: live ? live.muted : !!st.muted
+    // lost the live source (e.g. the sound server restarted): listen with wpctl again
+    onLiveChanged: if (!live) { listen(); exec.run(volGet); }
+
+    // ---- volume without the module: straight to PipeWire with wpctl -----------
     readonly property string volGet: "wpctl get-volume @DEFAULT_AUDIO_SINK@"
     property int volSent: -1
     property int volWanted: -1
@@ -123,6 +137,7 @@ PlasmoidItem {
     // Set the volume now; while dragging, at most every 50 ms.
     function setVolume(v) {
         v = Math.max(0, Math.min(100, Math.round(v)));
+        if (live && live.setPercent(v)) return;
         hold({ vol: v, muted: false });
         volWanted = v;
         if (!volThrottle.running) { sendVolume(); volThrottle.start(); }
@@ -134,6 +149,7 @@ PlasmoidItem {
         exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0");
     }
     function toggleMute() {
+        if (live && live.toggleMute()) return;
         hold({ muted: !root.st.muted });
         exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", true);   // true: a quick 2nd click counts
     }
@@ -145,13 +161,17 @@ PlasmoidItem {
     property bool canListen: true
     property double watchStarted: 0
     property int quickExits: 0
-    function listen() { watchStarted = Date.now(); exec.run(watchCmd); }
+    property bool listening: false
+    function listen() {
+        if (live || listening || !canListen) return;
+        listening = true; watchStarted = Date.now(); exec.run(watchCmd);
+    }
     Timer { id: relisten; interval: 100; onTriggered: root.listen() }
     Timer { id: retryListen; interval: 300000; onTriggered: { root.quickExits = 0; root.canListen = true; root.listen(); } }
     Component.onCompleted: { listen(); exec.run(volGet); claimVolume(); }
     Timer {
         interval: root.canListen ? 10000 : 500
-        running: true
+        running: !root.live
         repeat: true
         onTriggered: exec.run(root.volGet)
     }
@@ -177,6 +197,8 @@ PlasmoidItem {
                     root.absorb(next);
                 }
             } else if (cmd === root.watchCmd) {
+                root.listening = false;
+                if (root.live) return;          // the live source took over
                 if (code === 3) { root.canListen = false; return; }     // no pactl: poll
                 // Read the new state and listen again. Only a quick exit WITHOUT a
                 // real change ("hit") counts as the listener failing; after 5 in a
@@ -225,7 +247,7 @@ PlasmoidItem {
     readonly property int tileCount: 4 + (st.wifiHw ? 1 : 0) + (st.btHw ? 1 : 0)
     readonly property string netGlyph: st.ethOn ? "lan" : st.ssid ? wifiGlyph((st.signal || 0) / 100) : "signal_wifi_off"
     readonly property string btGlyph: !st.btOn ? "bluetooth_disabled" : st.btConnected > 0 ? "bluetooth_connected" : "bluetooth"
-    readonly property string volGlyph: volumeGlyph((st.vol || 0) / 100, st.muted)
+    readonly property string volGlyph: volumeGlyph(Math.max(0, volNow) / 100, mutedNow)
     readonly property string nightState: !st.nlOn ? "off" : st.nlInhibited ? "suspended" : st.nlRunning ? "warm" : "day"
 
     function uptimeText(sec) {
@@ -239,7 +261,7 @@ PlasmoidItem {
 
     toolTipMainText: "Quick settings"
     toolTipSubText: ready ? [st.ethOn ? "Ethernet" : (st.ssid || "No network"),
-                             "Volume " + (st.muted ? "muted" : st.vol + "%")].join(" · ") : ""
+                             "Volume " + (mutedNow ? "muted" : volNow + "%")].join(" · ") : ""
 
     // ---- In the panel ---------------------------------------------------------
     compactRepresentation: Item {
@@ -297,15 +319,15 @@ PlasmoidItem {
                 property real wheelAcc: 0
                 onWheel: wheel => {
                     const d = wheel.angleDelta.y;
-                    if (!root.ready || root.st.vol < 0 || d === 0) return;
+                    if (root.volNow < 0 || d === 0) return;
                     if ((wheelAcc > 0) !== (d > 0)) wheelAcc = 0;
                     wheelAcc += d;
                     const n = Math.trunc(wheelAcc / 120);   // whole notches only
                     if (n === 0) return;
                     wheelAcc -= n * 120;
                     // above 100% (set elsewhere), scrolling up must not pull it down to 100
-                    if (n > 0 && root.st.vol >= 100) return;
-                    root.setVolume(root.st.vol + 5 * n);
+                    if (n > 0 && root.volNow >= 100) return;
+                    root.setVolume(root.volNow + 5 * n);
                 }
             }
         }
@@ -324,7 +346,7 @@ PlasmoidItem {
         Layout.maximumHeight: Layout.preferredHeight
 
         function syncSliders() {
-            if (root.st.vol >= 0) vol.set(root.st.vol);
+            if (root.volNow >= 0) vol.set(root.volNow);
             if (root.st.bri >= 0) bri.set(root.st.bri);
         }
         // the card is built on first open: show the levels we already know
@@ -332,6 +354,7 @@ PlasmoidItem {
         Connections {
             target: root
             function onStChanged() { cardRoot.syncSliders(); }
+            function onVolNowChanged() { if (root.volNow >= 0) vol.set(root.volNow); }
         }
 
         ColumnLayout {
@@ -517,7 +540,7 @@ PlasmoidItem {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: root.st.vol !== undefined && root.st.vol >= 0
+                    visible: root.volNow >= 0
                     spacing: 10
                     IconButton {
                         pal: design; size: 30; glyph: root.volGlyph; fallback: "audio-volume-high-symbolic"

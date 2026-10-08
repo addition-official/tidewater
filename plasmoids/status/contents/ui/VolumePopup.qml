@@ -21,12 +21,19 @@ Item {
     property bool showNumber: false
     property bool active: true
 
-    // The level last read from the system (by the widget this sits in), used
-    // as the starting point when the card opens.
+    // The live volume (LiveVolume.qml, through the widget this sits in), or
+    // null without Plasma's volume module. With it, the card simply shows the
+    // real level as it changes, exactly as fast as Plasma's own popup.
+    property var live: null
+    readonly property int shownVol: live ? live.percent : vol
+    readonly property bool shownMuted: live ? live.muted : muted
+
+    // Without the live volume: the level last read from the system (by the
+    // widget this sits in), used as the starting point when the card opens.
     property int knownVol: -1
     property bool knownMuted: false
 
-    // ---- the level ---------------------------------------------------------------
+    // ---- the level without the live volume ----------------------------------------
     // Worked out here for every key press, the same way Plasma's audio service
     // changes the volume (its step, its limit, a key at 0 % mutes and any
     // other level unmutes), so the card keeps up however fast the keys come,
@@ -84,6 +91,11 @@ Item {
     function keyPressed(key) {
         if (!active)
             return;
+        if (live) {
+            // Plasma changes the volume itself; the bar follows the real level
+            show();
+            return;
+        }
         if (!card.visible) {
             // the widget's level, unless this card's own is fresher (it just
             // closed: the widget only catches up within a second or so)
@@ -137,7 +149,7 @@ Item {
         interval: 250
         onTriggered: popup.readLevel()
     }
-    onVolChanged: if (vol >= 0 && !card.visible && settle.running === false && Date.now() - lastPress < 1000)
+    onVolChanged: if (!live && vol >= 0 && !card.visible && settle.running === false && Date.now() - lastPress < 1000)
         show()
 
     Timer {
@@ -194,8 +206,8 @@ Item {
 
                 Glyph {
                     anchors.verticalCenter: parent.verticalCenter
-                    name: popup.glyphFor(popup.vol, popup.muted)
-                    fallback: popup.muted || popup.vol <= 0 ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
+                    name: popup.glyphFor(popup.shownVol, popup.shownMuted)
+                    fallback: popup.shownMuted || popup.shownVol <= 0 ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
                     size: 20
                     color: popup.pal.fg
                     fontAvailable: popup.pal.hasIconFont
@@ -208,16 +220,13 @@ Item {
                     height: 4
                     radius: 2
                     color: popup.pal.alpha(popup.pal.fg, 0.2)
+                    // drawn at the new level at once: an animation here would
+                    // restart on every step of a fast knob and always trail behind
                     Rectangle {
-                        width: parent.width * Math.max(0, Math.min(100, popup.vol)) / 100
+                        width: parent.width * Math.max(0, Math.min(100, popup.shownVol)) / 100
                         height: parent.height
                         radius: parent.radius
-                        color: popup.muted ? popup.pal.mut : popup.pal.acc
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 90
-                            }
-                        }
+                        color: popup.shownMuted ? popup.pal.mut : popup.pal.acc
                     }
                 }
                 Text {
@@ -225,7 +234,7 @@ Item {
                     visible: popup.showNumber
                     width: 28        // room for "100", so the card doesn't jump
                     horizontalAlignment: Text.AlignRight
-                    text: Math.max(0, popup.vol)
+                    text: Math.max(0, popup.shownVol)
                     color: popup.pal.fg
                     font.family: popup.pal.font
                     font.pixelSize: 14

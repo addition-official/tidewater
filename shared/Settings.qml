@@ -13,7 +13,8 @@
 // start widget, the taskbar and clock keep the settings they had before (see
 // offerLegacy); everything else stays at the defaults below.
 //
-// Every default reproduces Tidewater's look from before these options existed.
+// Every default reproduces Tidewater's look from before these options existed,
+// except showAllDesktops: each desktop now shows only its own windows.
 pragma Singleton
 import QtQuick
 
@@ -33,7 +34,7 @@ QtObject {
     property string alignment: "center"      // center, left
     property int iconSize: 28
     property bool expand: true               // fill the bar (so icons can be centered on the screen)
-    property bool showAllDesktops: true
+    property bool showAllDesktops: false     // false: each desktop shows only its own windows
     // clock
     property bool showSeconds: true
     property bool showDate: true
@@ -57,7 +58,7 @@ QtObject {
             alignment: "center",
             iconSize: 28,
             expand: true,
-            showAllDesktops: true,
+            showAllDesktops: false,
             showSeconds: true,
             showDate: true,
             hourMode: "system",

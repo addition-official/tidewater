@@ -22,7 +22,7 @@
     <entry name="alignment" type="String"><default>center</default></entry>
     <entry name="iconSize" type="Int"><default>28</default></entry>
     <entry name="expand" type="Bool"><default>true</default></entry>
-    <entry name="showAllDesktops" type="Bool"><default>true</default></entry>
+    <entry name="showAllDesktops" type="Bool"><default>false</default></entry>
     <!-- clock (these used to be the clock's own settings) -->
     <entry name="showSeconds" type="Bool"><default>true</default></entry>
     <!-- system = follow Region &amp; Language, 24h, 12h -->

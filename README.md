@@ -109,8 +109,9 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   - Search: icon and "Search", icon only, or hidden
   - overview button, dividers, power button: shown or hidden
   - desktops: numbered pills, dots, or hidden
-  - taskbar: icons centered or on the left, icon size, fill the bar, apps from
-    all desktops or just the current one
+  - taskbar: icons centered or on the left, icon size, fill the bar, and
+    whether each desktop shows only its own apps (the default) or every
+    desktop's apps
   - clock: seconds, 12- or 24-hour time, the date and its format
   - volume popup: on or off (off brings Plasma's own back as you had it),
     with or without the number

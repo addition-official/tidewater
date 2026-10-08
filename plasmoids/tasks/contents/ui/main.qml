@@ -53,7 +53,9 @@ PlasmoidItem {
         virtualDesktop: desktops.currentDesktop
         screenGeometry: Plasmoid.containment.screenGeometry
         activity: activities.currentActivity
-        // Same apps on every desktop unless you turn that off in Tidewater's settings.
+        // Each desktop shows only its own windows (like a separate PC). Pinned
+        // apps and windows set to "all desktops" still show everywhere.
+        // Tidewater's settings can switch back to showing every desktop's apps.
         filterByVirtualDesktop: !Settings.showAllDesktops
         filterByActivity: true
         filterByScreen: false
