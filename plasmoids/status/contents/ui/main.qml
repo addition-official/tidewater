@@ -30,6 +30,55 @@ PlasmoidItem {
 
     Palette { id: design }
 
+    // ---- volume popup (Windows style, for the volume keys) ----------------------
+    // One widget shows it: the first quick settings widget on the main monitor
+    // (Plasma numbers the main monitor 0).
+    readonly property bool onMainScreen: Plasmoid.containment !== null && Plasmoid.containment.screen === 0
+    readonly property bool volumeHost: Settings.volumeHost === root
+    onOnMainScreenChanged: claimVolume()
+    function claimVolume() {
+        if (onMainScreen)
+            Settings.claimVolume(root);
+        else
+            Settings.releaseVolume(root);
+    }
+    Component.onDestruction: Settings.releaseVolume(root)
+    Connections {
+        target: Settings
+        // another widget let go of it (e.g. removed): take it over
+        function onVolumeHostChanged() { if (!Settings.volumeHost) root.claimVolume(); }
+        function onVolumePopupChanged() { if (root.volumeHost) plasmaOsd.restart(); }
+    }
+    // Plasma's own popup goes off while ours is on, and comes back (as you had
+    // it) when ours is switched off. Waits a moment first: at login the saved
+    // settings arrive just after the widgets start.
+    onVolumeHostChanged: if (volumeHost) plasmaOsd.restart()
+    Timer {
+        id: plasmaOsd
+        interval: 2500
+        onTriggered: if (root.volumeHost) root.sh("plasma-osd " + (Settings.volumePopup ? "off" : "on"))
+    }
+    VolumePopup {
+        id: volumePopup
+        pal: design
+        active: root.volumeHost && Settings.volumePopup
+        showNumber: Settings.volumeNumber
+        knownVol: root.st.vol !== undefined ? root.st.vol : -1
+        knownMuted: !!root.st.muted
+        screenGeometry: Plasmoid.containment ? Plasmoid.containment.screenGeometry : Qt.rect(0, 0, 0, 0)
+        freeArea: Plasmoid.containment ? Plasmoid.containment.availableScreenRect : Qt.rect(0, 0, 0, 0)
+    }
+    // (loaded, so a Plasma without the D-Bus module it needs only loses the popup)
+    Loader {
+        id: volumeKeysLoader
+        active: volumePopup.active
+        source: "VolumeKeys.qml"
+    }
+    Connections {
+        target: volumeKeysLoader.item
+        function onPressed(key) { volumePopup.keyPressed(key); }
+    }
+
     // Everything the helper reports. See helper.sh status.
     property var st: ({})
     readonly property bool ready: st.user !== undefined
@@ -99,7 +148,7 @@ PlasmoidItem {
     function listen() { watchStarted = Date.now(); exec.run(watchCmd); }
     Timer { id: relisten; interval: 100; onTriggered: root.listen() }
     Timer { id: retryListen; interval: 300000; onTriggered: { root.quickExits = 0; root.canListen = true; root.listen(); } }
-    Component.onCompleted: { listen(); exec.run(volGet); }
+    Component.onCompleted: { listen(); exec.run(volGet); claimVolume(); }
     Timer {
         interval: root.canListen ? 10000 : 500
         running: true

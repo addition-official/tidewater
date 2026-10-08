@@ -38,6 +38,8 @@ KCM.SimpleKCM {
     property bool cfg_showDate
     property string cfg_hourMode
     property string cfg_dateFormat
+    property bool cfg_volumePopup
+    property bool cfg_volumeNumber
     property string cfg_settingsRev
     property var cfg_pinned   // not shown here, but Plasma passes every setting in
     // Plasma also passes each setting's default value; declared so it has
@@ -56,6 +58,8 @@ KCM.SimpleKCM {
     property bool cfg_showDateDefault
     property string cfg_hourModeDefault
     property string cfg_dateFormatDefault
+    property bool cfg_volumePopupDefault
+    property bool cfg_volumeNumberDefault
     property string cfg_settingsRevDefault
     property var cfg_pinnedDefault
 
@@ -430,6 +434,38 @@ KCM.SimpleKCM {
                 + "M, MM, MMM or MMMM = month, yy or yyyy = year. "
                 + "Other characters (spaces, commas, dots, slashes) show as typed; "
                 + "wrap letters in 'single quotes' to show them literally."
+        }
+
+        // ==== Volume popup
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Volume"
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Volume keys:"
+            text: "Show the Windows-style volume popup"
+            checked: cfg_volumePopup
+            onToggled: {
+                cfg_volumePopup = checked;
+                page.touch();
+            }
+        }
+        QQC2.CheckBox {
+            text: "Show the number next to the bar"
+            enabled: cfg_volumePopup
+            checked: cfg_volumeNumber
+            onToggled: {
+                cfg_volumeNumber = checked;
+                page.touch();
+            }
+        }
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+            text: "At the bottom of the main monitor, for the volume and mute keys. "
+                + "While it is on, Plasma's own volume popup is off; turning this "
+                + "off brings Plasma's back."
         }
     }
 }

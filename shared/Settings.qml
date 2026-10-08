@@ -39,6 +39,9 @@ QtObject {
     property bool showDate: true
     property string hourMode: "system"       // system, 24h, 12h
     property string dateFormat: "ddd d MMM"
+    // volume popup (Windows style, for the volume keys)
+    property bool volumePopup: true
+    property bool volumeNumber: false
 
     // When the settings shown here were saved (milliseconds since 1970).
     // 0: nothing has been offered yet.
@@ -58,7 +61,9 @@ QtObject {
             showSeconds: true,
             showDate: true,
             hourMode: "system",
-            dateFormat: "ddd d MMM"
+            dateFormat: "ddd d MMM",
+            volumePopup: true,
+            volumeNumber: false
         })
     readonly property var keys: Object.keys(defaults)
     // the options that used to live in the taskbar's and the clock's own settings
@@ -152,6 +157,20 @@ QtObject {
             for (const k in vals)
                 if (k in defaults)
                     s[k] = clean(k, vals[k]);
+    }
+
+    // ---- the volume popup ------------------------------------------------------
+    // Shown by one quick settings widget only: the first one on the main
+    // monitor claims it (with two monitors there are two of them).
+    property var volumeHost: null
+    function claimVolume(o) {
+        if (!volumeHost)
+            volumeHost = o;
+        return volumeHost === o;
+    }
+    function releaseVolume(o) {
+        if (volumeHost === o)
+            volumeHost = null;
     }
 
     // ---- opening the settings page --------------------------------------------

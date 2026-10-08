@@ -115,6 +115,9 @@ if [ "$PURGE" = 1 ]; then
     # a cache folder of our own when there is none
     if [ -n "${XDG_RUNTIME_DIR:-}" ]; then add "$XDG_RUNTIME_DIR"/tidewater-*; fi
     add "$HOME/.cache/tidewater" "$XCACHE/tidewater"
+    # what Plasma's volume popup was set to before Tidewater's took over (put
+    # back below first, so it is only a leftover by the time it goes)
+    add "${XDG_CONFIG_HOME:-$HOME/.config}/tidewaterrc"
     n=${#PURGE_LIST[@]}
     add "$HOME/.cache/plasmashell/qmlcache" "$XCACHE/plasmashell/qmlcache"
     QMLCACHES=("${PURGE_LIST[@]:$n}")
@@ -285,6 +288,20 @@ fi
 
 if [ "$KEEP" = 0 ]; then
     rm -f "$HOME/.local/share/color-schemes/TidewaterLight.colors" "$HOME/.local/share/color-schemes/TidewaterDark.colors"
+fi
+
+# Plasma's own volume popup: Tidewater's switched it off while its own was on.
+# Put back what you had (the same as the quick settings helper's plasma-osd on).
+if [ "$KEEP" = 0 ] && have kwriteconfig6 && have kreadconfig6 \
+    && [ "$(kreadconfig6 --file tidewaterrc --group PlasmaVolumePopup --key Saved)" = true ]; then
+    for k in VolumeOsd MuteOsd; do
+        v=$(kreadconfig6 --file tidewaterrc --group PlasmaVolumePopup --key "$k" --default true)
+        [ "$v" = false ] || v=true
+        kwriteconfig6 --file plasmaparc --group General --notify --key "$k" --type bool "$v"
+        kwriteconfig6 --file tidewaterrc --group PlasmaVolumePopup --key "$k" --delete
+    done
+    kwriteconfig6 --file tidewaterrc --group PlasmaVolumePopup --key Saved --delete
+    say "Restored Plasma's volume popup"
 fi
 
 if [ "$PURGE" = 1 ]; then

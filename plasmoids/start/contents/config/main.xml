@@ -29,6 +29,9 @@
     <entry name="hourMode" type="String"><default>system</default></entry>
     <entry name="showDate" type="Bool"><default>true</default></entry>
     <entry name="dateFormat" type="String"><default>ddd d MMM</default></entry>
+    <!-- volume popup for the volume keys (Windows style), and its number -->
+    <entry name="volumePopup" type="Bool"><default>true</default></entry>
+    <entry name="volumeNumber" type="Bool"><default>false</default></entry>
     <!-- When these settings were last saved, in milliseconds since 1970 (kept
          as text so it is stored exactly). Empty: never; the old taskbar and
          clock settings are then moved over once. -->

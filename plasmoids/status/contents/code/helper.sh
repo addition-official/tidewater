@@ -10,12 +10,13 @@
 #   bash helper.sh wifi off        # any command below works by hand too
 #
 # Commands: status | wifi on|off | bluetooth on|off | dnd on|off | mic |
-#   nightlight | brightness 0-100 | watch-audio | power |
+#   nightlight | brightness 0-100 | watch-audio | plasma-osd on|off | power |
 #   open systemsettings [kcm_name] |
 #   volume 0-100 | mute | lock   (the last three are for use by hand: the
 #   widget talks to PipeWire directly for volume)
 #
-# Nothing here uses sudo or the network, or writes anywhere but your own config.
+# Nothing here uses sudo or the network, or writes anywhere but your own config
+# (plasma-osd writes plasmaparc and tidewaterrc in ~/.config).
 
 set -u
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -205,6 +206,34 @@ case $cmd in
             timeout 4 bluetoothctl power on
         else
             timeout 4 bluetoothctl power off
+        fi ;;
+    plasma-osd)                                           # on | off
+        # Plasma's own volume popup (System Settings > Sound > Configure
+        # volume controls). "off" while Tidewater's popup is on, so only one
+        # shows; "on" puts back what you had before Tidewater switched it off.
+        # What you had is kept in tidewaterrc until it is put back.
+        want=$(onoff "${1-}") || exit 2
+        have kwriteconfig6 && have kreadconfig6 || exit 0
+        tw() { kwriteconfig6 --file tidewaterrc --group PlasmaVolumePopup "$@"; }
+        pa() { kwriteconfig6 --file plasmaparc --group General --notify "$@"; }
+        saved=$(kreadconfig6 --file tidewaterrc --group PlasmaVolumePopup --key Saved)
+        if [ "$want" = off ]; then
+            if [ "$saved" != true ]; then
+                tw --key VolumeOsd "$(kreadconfig6 --file plasmaparc --group General --key VolumeOsd --default true)"
+                tw --key MuteOsd "$(kreadconfig6 --file plasmaparc --group General --key MuteOsd --default true)"
+                tw --key Saved true
+            fi
+            pa --key VolumeOsd --type bool false
+            pa --key MuteOsd --type bool false
+        elif [ "$saved" = true ]; then
+            for k in VolumeOsd MuteOsd; do
+                v=$(kreadconfig6 --file tidewaterrc --group PlasmaVolumePopup --key "$k" --default true)
+                [ "$v" = false ] || v=true
+                pa --key "$k" --type bool "$v"
+            done
+            tw --key VolumeOsd --delete
+            tw --key MuteOsd --delete
+            tw --key Saved --delete
         fi ;;
     mic) wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle ;;
     mute) wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;

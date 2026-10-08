@@ -94,6 +94,10 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
 - **Clock:** a calendar that scrolls smoothly week by week (so the end of one
   month and the start of the next show together), optional seconds, 12- or
   24-hour time, and the date in any order you like
+- **Volume popup** in the Windows 11 style: the volume and mute keys (and a
+  headset's volume buttons) show a small card with the level at the bottom
+  of the main monitor, optionally with the number. Sliders and scrolling
+  don't show it. Plasma's own volume popup is off while it is on
 - **Notification center:** grouped by app, Do not disturb, Clear all
 - **Alt+Tab** in the Windows 11 style: centered rows of window cards sized to
   each window; hover for X, Delete closes the selected one
@@ -108,6 +112,8 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   - taskbar: icons centered or on the left, icon size, fill the bar, apps from
     all desktops or just the current one
   - clock: seconds, 12- or 24-hour time, the date and its format
+  - volume popup: on or off (off brings Plasma's own back as you had it),
+    with or without the number
 
   The defaults are the look shown above. A hidden piece takes almost no space,
   just Plasma's small gap between widgets (Plasma's own right-click > Remove
@@ -127,6 +133,8 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   small or heavily scaled screens (e.g. 1366 x 768 at 125 %).
 - Live thumbnails in the taskbar previews need Wayland; on X11 they show the
   app icon. (Alt+Tab's thumbnails work on both.)
+- The volume popup is shown by the quick settings icons (network, Bluetooth,
+  volume) on the main monitor's panel, and needs Plasma 6.4 or newer.
 - Right-to-left languages and panels at the top or sides haven't been tested.
 
 ## Troubleshooting
