@@ -40,7 +40,7 @@ QtObject {
     property bool showDate: true
     property string hourMode: "system"       // system, 24h, 12h
     property string dateFormat: "ddd d MMM"
-    // volume popup (Windows style, for the volume keys)
+    // volume popup (Windows style)
     property bool volumePopup: true
     property bool volumeNumber: false
 
@@ -161,17 +161,23 @@ QtObject {
     }
 
     // ---- the volume popup ------------------------------------------------------
-    // Shown by one quick settings widget only: the first one on the main
-    // monitor claims it (with two monitors there are two of them).
-    property var volumeHost: null
-    function claimVolume(o) {
-        if (!volumeHost)
-            volumeHost = o;
-        return volumeHost === o;
+    // Shown by one quick settings widget only (with two monitors there are two
+    // of them): the one on the main monitor, or else the first one. Worked out
+    // again whenever a widget's monitor changes, so monitors going off and on
+    // (e.g. during sleep) can never leave it with no widget.
+    property var statusWidgets: []
+    function addStatus(o) {
+        if (statusWidgets.indexOf(o) < 0)
+            statusWidgets = statusWidgets.concat([o]);
     }
-    function releaseVolume(o) {
-        if (volumeHost === o)
-            volumeHost = null;
+    function removeStatus(o) {
+        statusWidgets = statusWidgets.filter(x => x !== o);
+    }
+    readonly property var volumeHost: {
+        for (const w of statusWidgets)
+            if (w.onMainScreen)
+                return w;
+        return statusWidgets.length > 0 ? statusWidgets[0] : null;
     }
 
     // ---- opening the settings page --------------------------------------------

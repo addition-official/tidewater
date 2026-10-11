@@ -10,10 +10,10 @@
 #   bash helper.sh wifi off        # any command below works by hand too
 #
 # Commands: status | wifi on|off | bluetooth on|off | dnd on|off | mic |
-#   nightlight | brightness 0-100 | watch-audio | plasma-osd on|off | power |
+#   nightlight | brightness 0-100 | plasma-osd on|off | power |
 #   open systemsettings [kcm_name] |
 #   volume 0-100 | mute | lock   (the last three are for use by hand: the
-#   widget talks to PipeWire directly for volume)
+#   widget sets the volume through Plasma's own volume module)
 #
 # Nothing here uses sudo or the network, or writes anywhere but your own config
 # (plasma-osd writes plasmaparc and tidewaterrc in ~/.config).
@@ -259,39 +259,6 @@ case $cmd in
         else
             kwriteconfig6 --file plasmanotifyrc --group DoNotDisturb --key Until --notify --delete
         fi ;;
-    watch-audio)
-        # Returns as soon as anything changes the sound (volume keys, other
-        # apps, a new default device), so the widget can update at once.
-        # Exit 3 = pactl isn't available; the widget then polls instead.
-        command -v pactl >/dev/null 2>&1 || exit 3
-        # The widget starts us again right after each "hit". If PipeWire keeps
-        # reporting changes (it can, during playback), don't let that turn into
-        # a busy loop: at most one hit a second. We listen straight away (so no
-        # change is missed) and only hold back the report. The time of the
-        # last hit is kept in a private file of our own.
-        wdir=${XDG_RUNTIME_DIR:-}
-        [ -n "$wdir" ] && [ -d "$wdir" ] && [ -O "$wdir" ] || wdir=${XDG_CACHE_HOME:-$HOME/.cache}/tidewater
-        ( umask 077; mkdir -p "$wdir" ) 2>/dev/null
-        stamp=$wdir/tidewater-watch
-        # In its own process group, so "kill 0" only ends this little pipeline,
-        # and timeout inside it, so on timeout the whole group (pactl too) goes.
-        # Prints "hit" when a real change arrived (vs. a timeout or failure).
-        # "sink #" / "server" only: not sink-input, i.e. not apps opening streams.
-        res=$(setsid -w timeout 120 bash -c \
-            'pactl subscribe 2>/dev/null | { grep -m1 -qE "on (sink #|server)" && echo hit; kill 0; }' \
-            2>/dev/null)
-        if [ "$res" = hit ]; then
-            last=""
-            [ -f "$stamp" ] && [ ! -L "$stamp" ] && read -r last <"$stamp" 2>/dev/null
-            now=$(date +%s%3N)                 # milliseconds
-            if isnum "$last" && isnum "$now" && [ $(( now - last )) -lt 1000 ]; then
-                sleep "$(printf '0.%03d' $(( 1000 - (now - last) )))"
-            fi
-            # remember when, in a private file (never follow a planted link)
-            ( umask 077; [ -L "$stamp" ] || date +%s%3N >"$stamp" ) 2>/dev/null
-            echo hit
-        fi
-        exit 0 ;;
     open)                                  # open systemsettings [kcm_name]
         # Only System Settings, optionally on one of its pages: never any
         # other program, whatever the caller passes.

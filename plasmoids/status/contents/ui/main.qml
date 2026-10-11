@@ -30,29 +30,20 @@ PlasmoidItem {
 
     Palette { id: design }
 
-    // ---- volume popup (Windows style, for the volume keys) ----------------------
-    // One widget shows it: the first quick settings widget on the main monitor
-    // (Plasma numbers the main monitor 0).
+    // ---- volume popup (Windows style) --------------------------------------------
+    // Shown by one quick settings widget: the one on the main monitor (see
+    // Settings.volumeHost).
     readonly property bool onMainScreen: Plasmoid.containment !== null && Plasmoid.containment.screen === 0
     readonly property bool volumeHost: Settings.volumeHost === root
-    onOnMainScreenChanged: claimVolume()
-    function claimVolume() {
-        if (onMainScreen)
-            Settings.claimVolume(root);
-        else
-            Settings.releaseVolume(root);
-    }
-    Component.onDestruction: Settings.releaseVolume(root)
+    Component.onDestruction: Settings.removeStatus(root)
+    // Plasma's own popup is off while ours is on, and comes back (as you had it)
+    // when ours is switched off. A moment after start: at login the saved
+    // settings arrive just after the widgets.
+    onVolumeHostChanged: if (volumeHost) plasmaOsd.restart()
     Connections {
         target: Settings
-        // another widget let go of it (e.g. removed): take it over
-        function onVolumeHostChanged() { if (!Settings.volumeHost) root.claimVolume(); }
         function onVolumePopupChanged() { if (root.volumeHost) plasmaOsd.restart(); }
     }
-    // Plasma's own popup goes off while ours is on, and comes back (as you had
-    // it) when ours is switched off. Waits a moment first: at login the saved
-    // settings arrive just after the widgets start.
-    onVolumeHostChanged: if (volumeHost) plasmaOsd.restart()
     Timer {
         id: plasmaOsd
         interval: 2500
@@ -64,20 +55,8 @@ PlasmoidItem {
         active: root.volumeHost && Settings.volumePopup
         showNumber: Settings.volumeNumber
         live: root.live
-        knownVol: root.volNow
-        knownMuted: root.mutedNow
         screenGeometry: Plasmoid.containment ? Plasmoid.containment.screenGeometry : Qt.rect(0, 0, 0, 0)
         freeArea: Plasmoid.containment ? Plasmoid.containment.availableScreenRect : Qt.rect(0, 0, 0, 0)
-    }
-    // (loaded, so a Plasma without the D-Bus module it needs only loses the popup)
-    Loader {
-        id: volumeKeysLoader
-        active: volumePopup.active
-        source: "VolumeKeys.qml"
-    }
-    Connections {
-        target: volumeKeysLoader.item
-        function onPressed(key) { volumePopup.keyPressed(key); }
     }
 
     // Everything the helper reports. See helper.sh status.
@@ -89,7 +68,9 @@ PlasmoidItem {
         return u.startsWith("file://") ? decodeURIComponent(u.substring(7)) : u;
     }
     function sh(args, repeat) { exec.run("bash " + exec.q(helper) + " " + args, repeat); }
-    function refresh() { sh("status"); }
+    // With a time limit: if something it asks hangs (it can, right after sleep),
+    // the next check still runs instead of everything staying frozen.
+    function refresh() { exec.run("timeout 5 bash " + exec.q(helper) + " status"); }
     function patch(obj) { root.st = Object.assign({}, root.st, obj); }
 
     // When you tap something, it changes on screen at once and *stays* changed
@@ -117,64 +98,22 @@ PlasmoidItem {
     }
 
     // ---- volume ---------------------------------------------------------------
-    // Live from Plasma's own volume module (LiveVolume.qml), like Plasma's
-    // volume popup: every change shows at once, even a knob spun fast. Without
-    // that module, the wpctl code below takes over (slower: it learns about
-    // changes through a listener that reports at most once a second).
+    // One source: Plasma's own volume module (LiveVolume.qml), the same one
+    // Plasma's volume icon uses. Every change shows at once, even a knob spun
+    // fast, and it reconnects by itself after sleep.
     Loader { id: liveLoader; source: "LiveVolume.qml" }
-    readonly property var live: liveLoader.item && liveLoader.item.ok ? liveLoader.item : null
-    // what the bar, icon and tooltip show
-    readonly property int volNow: live ? live.percent : (st.vol === undefined ? -1 : st.vol)
-    readonly property bool mutedNow: live ? live.muted : !!st.muted
-    // lost the live source (e.g. the sound server restarted): listen with wpctl again
-    onLiveChanged: if (!live) { listen(); exec.run(volGet); }
-
-    // ---- volume without the module: straight to PipeWire with wpctl -----------
-    readonly property string volGet: "wpctl get-volume @DEFAULT_AUDIO_SINK@"
-    property int volSent: -1
-    property int volWanted: -1
-
-    // Set the volume now; while dragging, at most every 50 ms.
+    readonly property var live: liveLoader.item
+    readonly property int volNow: live ? live.percent : -1
+    readonly property bool mutedNow: live ? live.muted : false
     function setVolume(v) {
-        v = Math.max(0, Math.min(100, Math.round(v)));
-        if (live && live.setPercent(v)) return;
-        hold({ vol: v, muted: false });
-        volWanted = v;
-        if (!volThrottle.running) { sendVolume(); volThrottle.start(); }
-    }
-    function sendVolume() {
-        if (volWanted < 0 || volWanted === volSent) return;
-        volSent = volWanted;
-        exec.run("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + volWanted + "%");
-        exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0");
+        volumePopup.quietUntil = Date.now() + 1000;     // no popup for our own slider
+        if (live) live.setPercent(Math.max(0, Math.min(100, Math.round(v))));
     }
     function toggleMute() {
-        if (live && live.toggleMute()) return;
-        hold({ muted: !root.st.muted });
-        exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", true);   // true: a quick 2nd click counts
+        volumePopup.quietUntil = Date.now() + 1000;
+        if (live) live.toggleMute();
     }
-    Timer { id: volThrottle; interval: 50; onTriggered: root.sendVolume() }
-
-    // Listen for sound changes (volume keys, other apps) and update at once.
-    // If that isn't possible (no pactl), fall back to checking twice a second.
-    readonly property string watchCmd: "bash " + exec.q(helper) + " watch-audio"
-    property bool canListen: true
-    property double watchStarted: 0
-    property int quickExits: 0
-    property bool listening: false
-    function listen() {
-        if (live || listening || !canListen) return;
-        listening = true; watchStarted = Date.now(); exec.run(watchCmd);
-    }
-    Timer { id: relisten; interval: 100; onTriggered: root.listen() }
-    Timer { id: retryListen; interval: 300000; onTriggered: { root.quickExits = 0; root.canListen = true; root.listen(); } }
-    Component.onCompleted: { listen(); exec.run(volGet); claimVolume(); }
-    Timer {
-        interval: root.canListen ? 10000 : 500
-        running: !root.live
-        repeat: true
-        onTriggered: exec.run(root.volGet)
-    }
+    Component.onCompleted: Settings.addStatus(root)
 
     Exec {
         id: exec
@@ -188,28 +127,6 @@ PlasmoidItem {
                     return;
                 }
                 root.absorb(next);
-            } else if (cmd === root.volGet) {
-                const m = /Volume:\s*([0-9.]+)/.exec(out);
-                if (m) {
-                    const next = Object.assign({}, root.st);
-                    next.vol = Math.round(parseFloat(m[1]) * 100);
-                    next.muted = out.indexOf("MUTED") >= 0;
-                    root.absorb(next);
-                }
-            } else if (cmd === root.watchCmd) {
-                root.listening = false;
-                if (root.live) return;          // the live source took over
-                if (code === 3) { root.canListen = false; return; }     // no pactl: poll
-                // Read the new state and listen again. Only a quick exit WITHOUT a
-                // real change ("hit") counts as the listener failing; after 5 in a
-                // row, poll for a while and try listening again later.
-                const hit = out.indexOf("hit") >= 0;
-                root.quickExits = !hit && Date.now() - root.watchStarted < 1000 ? root.quickExits + 1 : 0;
-                if (root.quickExits >= 5) { root.canListen = false; retryListen.restart(); return; }
-                exec.run(root.volGet);
-                relisten.restart();
-            } else if (cmd.startsWith("wpctl ")) {
-                // our own volume changes: the listener reports them back
             } else {
                 settle.restart();
             }

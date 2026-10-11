@@ -463,7 +463,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: "At the bottom of the main monitor, for the volume and mute keys. "
+            text: "At the bottom of the main monitor, when the volume changes. "
                 + "While it is on, Plasma's own volume popup is off; turning this "
                 + "off brings Plasma's back."
         }

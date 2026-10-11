@@ -94,10 +94,11 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
 - **Clock:** a calendar that scrolls smoothly week by week (so the end of one
   month and the start of the next show together), optional seconds, 12- or
   24-hour time, and the date in any order you like
-- **Volume popup** in the Windows 11 style: the volume and mute keys (and a
-  headset's volume buttons) show a small card with the level at the bottom
-  of the main monitor, optionally with the number. Sliders and scrolling
-  don't show it. Plasma's own volume popup is off while it is on
+- **Volume popup** in the Windows 11 style: changing the volume (keys, a
+  volume knob, a headset's buttons) shows a small card with the level at the
+  bottom of the main monitor, optionally with the number. Tidewater's own
+  slider and scrolling don't show it. Plasma's own volume popup is off while
+  it is on
 - **Notification center:** grouped by app, Do not disturb, Clear all
 - **Alt+Tab** in the Windows 11 style: centered rows of window cards sized to
   each window; hover for X, Delete closes the selected one
@@ -135,7 +136,8 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
 - Live thumbnails in the taskbar previews need Wayland; on X11 they show the
   app icon. (Alt+Tab's thumbnails work on both.)
 - The volume popup is shown by the quick settings icons (network, Bluetooth,
-  volume) on the main monitor's panel, and needs Plasma 6.4 or newer.
+  volume) on the main monitor's panel, and needs Plasma's volume module
+  (plasma-pa, part of a normal Plasma install).
 - Right-to-left languages and panels at the top or sides haven't been tested.
 
 ## Troubleshooting
