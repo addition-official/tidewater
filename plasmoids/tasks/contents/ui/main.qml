@@ -184,6 +184,7 @@ PlasmoidItem {
         if (previewWindows.length === 0)
             return;
         cardByClick = true;
+        placePreview();
         preview.visible = true;
     }
     // Where a window is in the model *now* (rows shift as other apps open and
@@ -269,8 +270,10 @@ PlasmoidItem {
         interval: 500
         onTriggered: {
             root.fillPreview();
-            if (root.previewWindows.length > 0)
+            if (root.previewWindows.length > 0) {
+                root.placePreview();
                 preview.visible = true;
+            }
         }
     }
     // A card opened by a click gets a little longer to reach before it closes.
@@ -293,18 +296,54 @@ PlasmoidItem {
     // how many windows get a cell; the rest are counted in the "+N more" cell
     readonly property int shownCells: previewWindows.length > maxCells ? maxCells - 1 : previewWindows.length
 
+    // Where the card goes: above the hovered icon, always kept inside the
+    // monitor this taskbar is on. Plasma's own popup placement (visualParent)
+    // checks against the monitor Qt *thinks* a window is on, which with
+    // several monitors can be the wrong one and pushed the card onto the
+    // other monitor. The panel's own screen geometry is always right.
+    function placePreview() {
+        const t = hoveredTask;
+        const g = Plasmoid.containment.screenGeometry;
+        if (!t || g.width <= 0 || g.height <= 0)
+            return;
+        const w = preview.width;
+        const h = preview.height;
+        const icon = t.mapToGlobal(0, 0);
+        const free = Plasmoid.containment.availableScreenRect;
+        // just above the panel; the icon's own top if the free area is unknown
+        const bottom = free.height > 0 ? g.y + free.y + free.height : icon.y;
+        const gap = 4;
+        let x = Math.round(icon.x + (t.width - w) / 2);
+        let y = Math.round(bottom - h - gap);
+        x = Math.max(g.x + gap, Math.min(g.x + g.width - w - gap, x));
+        y = Math.max(g.y + gap, Math.min(g.y + g.height - h - gap, y));
+        preview.x = x;
+        preview.y = y;
+    }
+    onHoveredTaskChanged: if (preview.visible)
+        Qt.callLater(placePreview)
+
     PlasmaCore.Dialog {
         id: preview
         type: PlasmaCore.Dialog.Tooltip
         flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
-        location: Plasmoid.location
-        visualParent: root.hoveredTask
+        // Placed by hand (placePreview), so no visualParent: see there.
+        location: PlasmaCore.Types.Floating
         // Plasma's own frame (with KWin's shadow and blur). A card drawn by
         // hand on a frameless (NoBackground) popup never showed up on Wayland.
         backgroundHints: PlasmaCore.Dialog.StandardBackground
         visible: false
-        onVisibleChanged: if (!visible)
-            root.cardByClick = false
+        onVisibleChanged: {
+            if (visible)
+                Qt.callLater(root.placePreview);
+            else
+                root.cardByClick = false;
+        }
+        // the card grows and shrinks with the number of windows: stay centered
+        onWidthChanged: if (visible)
+            root.placePreview()
+        onHeightChanged: if (visible)
+            root.placePreview()
 
         mainItem: Item {
             id: cardWindow
