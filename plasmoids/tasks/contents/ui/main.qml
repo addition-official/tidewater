@@ -79,12 +79,15 @@ PlasmoidItem {
 
     // These options used to be saved in this taskbar's own settings. Hand them
     // to the start widget, which moves them into Tidewater's settings once.
-    Component.onCompleted: Settings.offerLegacy("tasks", {
-        alignment: Plasmoid.configuration.alignment,
-        iconSize: Plasmoid.configuration.iconSize,
-        expand: Plasmoid.configuration.expand,
-        showAllDesktops: Plasmoid.configuration.showAllDesktops
-    })
+    Component.onCompleted: {
+        Settings.offerLegacy("tasks", {
+            alignment: Plasmoid.configuration.alignment,
+            iconSize: Plasmoid.configuration.iconSize,
+            expand: Plasmoid.configuration.expand,
+            showAllDesktops: Plasmoid.configuration.showAllDesktops
+        });
+        watch();    // start listening for badges and progress
+    }
 
     // sized from the bar thickness (52); icon size and alignment are Tidewater's settings
     readonly property real k: Math.max(0.7, design.unit)
@@ -106,30 +109,100 @@ PlasmoidItem {
     property int modelRev: 0
 
     // ---- badges and progress -------------------------------------
-    // Unread counts and progress (downloads, copies) that apps report, the way
-    // Plasma's own taskbar shows them. The object that tracks them comes from
-    // Plasma's taskbar plugin; it is made at run time, so if the plugin is
-    // missing or renamed the taskbar still works, just without badges.
-    // Plasma 6.3 and newer name the module after the applet, older 6.x used a
-    // private name: try both, and remember which one worked.
-    readonly property var smartModules: ["plasma.applet.org.kde.plasma.taskmanager", "org.kde.plasma.private.taskmanager"]
-    property int smartModule: -1        // index into smartModules; -2: none works
-    function makeSmartLauncher(t) {
-        if (smartModule === -2)
-            return null;
-        const tries = smartModule >= 0 ? [smartModule] : smartModules.map((_, i) => i);
-        for (const i of tries) {
-            const c = Qt.createComponent(smartModules[i], "SmartLauncherItem");
-            const o = c.status === Component.Ready ? c.createObject(t) : null;
-            c.destroy();
-            if (o) {
-                smartModule = i;
-                o.launcherUrl = Qt.binding(() => t.model.LauncherUrlWithoutIcon || "");
-                return o;
+    // Unread counts and progress (a download, a copy) that apps report for
+    // their taskbar icon. Apps send these as D-Bus messages (the "Unity
+    // launcher" signal); ../code/launcher-watch.sh waits for them and prints
+    // each one, and is run again every time it returns, so the taskbar keeps
+    // listening. (Plasma's own badge code is built into Plasma's taskbar
+    // widget and can't be used from here.)
+    Exec {
+        id: exec
+    }
+    readonly property string watchCmd: {
+        const u = Qt.resolvedUrl("../code/launcher-watch.sh").toString();
+        return "bash " + exec.q(u.startsWith("file://") ? decodeURIComponent(u.substring(7)) : u);
+    }
+    // app key (see appKey) -> { count, countVisible, progress, progressVisible, urgent }
+    property var badges: ({})
+    // "application://org.kde.dolphin.desktop", "applications:org.kde.dolphin.desktop",
+    // a .desktop file's path, or an app id: all give "org.kde.dolphin".
+    function appKey(s) {
+        let t = String(s || "").split("?")[0];
+        t = t.substring(Math.max(t.lastIndexOf("/"), t.lastIndexOf(":")) + 1);
+        if (t.endsWith(".desktop"))
+            t = t.substring(0, t.length - 8);
+        return t.toLowerCase();
+    }
+    // Each message only carries what changed: merge it into what is known.
+    function takeLauncherMessages(out) {
+        const next = Object.assign({}, badges);
+        let changed = false;
+        for (const line of String(out || "").split("\n")) {
+            let msg;
+            try {
+                msg = JSON.parse(line);
+            } catch (e) {
+                continue;
             }
+            const data = msg && msg.payload && msg.payload.data;
+            if (!Array.isArray(data) || data.length < 2 || typeof data[1] !== "object")
+                continue;
+            const key = appKey(data[0]);
+            if (!key)
+                continue;
+            const was = next[key] || { count: 0, countVisible: false, progress: 0, progressVisible: false, urgent: false };
+            const b = Object.assign({}, was);
+            const props = data[1];
+            const val = name => props[name] ? props[name].data : undefined;
+            if (val("count") !== undefined)
+                b.count = Math.max(0, Math.round(Number(val("count")) || 0));
+            if (val("count-visible") !== undefined)
+                b.countVisible = val("count-visible") === true;
+            if (val("progress") !== undefined)
+                b.progress = Math.max(0, Math.min(1, Number(val("progress")) || 0));
+            if (val("progress-visible") !== undefined)
+                b.progressVisible = val("progress-visible") === true;
+            if (val("urgent") !== undefined)
+                b.urgent = val("urgent") === true;
+            next[key] = b;
+            changed = true;
         }
-        smartModule = -2;
-        return null;
+        if (changed)
+            badges = next;
+    }
+    // An app that quit: forget what it last reported.
+    function clearBadge(keys) {
+        if (!keys.some(k => k && badges[k]))
+            return;
+        const next = Object.assign({}, badges);
+        for (const k of keys)
+            delete next[k];
+        badges = next;
+    }
+    property double watchStarted: 0
+    function watch() {
+        watchStarted = Date.now();
+        exec.run(watchCmd);
+    }
+    Connections {
+        target: exec
+        function onFinished(cmd, out, code) {
+            if (cmd !== root.watchCmd)
+                return;
+            root.takeLauncherMessages(out);
+            // Back straight away to keep listening. If it returned at once with
+            // nothing (busctl missing or not allowed to listen), wait a while
+            // before trying again instead of running it over and over.
+            if (String(out || "").trim() === "" && Date.now() - root.watchStarted < 5000)
+                watchRetry.start();
+            else
+                root.watch();
+        }
+    }
+    Timer {
+        id: watchRetry
+        interval: 60000
+        onTriggered: root.watch()
     }
 
     // ---- drag to reorder -------------------------------------------
@@ -632,11 +705,14 @@ PlasmoidItem {
                             root.leaveTask(hovered ? root.hoveredTask : task);
                     }
                     readonly property string key: root.keyFor(model.LauncherUrlWithoutIcon, model.WinIdList)
-                    // unread count and progress the app reports (null: unavailable)
-                    property QtObject smart: null
-                    Component.onCompleted: smart = root.makeSmartLauncher(task)
-                    readonly property int badgeCount: smart && smart.countVisible ? smart.count : 0
-                    readonly property bool showProgress: !!smart && smart.progressVisible && !isLauncher
+                    // Unread count and progress the app reports (see root.badges),
+                    // only while it runs, like Windows.
+                    readonly property var badgeKeys: [root.appKey(model.AppId), root.appKey(model.LauncherUrlWithoutIcon)]
+                    readonly property var badge: isLauncher ? null : (root.badges[badgeKeys[0]] || root.badges[badgeKeys[1]] || null)
+                    readonly property int badgeCount: badge && badge.countVisible ? badge.count : 0
+                    readonly property bool showProgress: !!badge && badge.progressVisible
+                    onIsLauncherChanged: if (isLauncher)
+                        root.clearBadge(badgeKeys)
                     readonly property bool beingDragged: root.dragging && root.dragKey === key
 
                     // Which dot (one per window, at most 4) is the long bar: the
@@ -690,7 +766,7 @@ PlasmoidItem {
                             anchors.fill: parent
                             radius: parent.radius
                             color: design.r.warning
-                            opacity: task.model.IsDemandingAttention || (task.smart && task.smart.urgent) ? 0.25 : 0
+                            opacity: task.model.IsDemandingAttention || (task.badge && task.badge.urgent) ? 0.25 : 0
                         }
                     }
 
@@ -744,7 +820,7 @@ PlasmoidItem {
                         radius: 1.5
                         color: design.alpha(design.fg, 0.2)
                         Rectangle {
-                            width: parent.width * Math.max(0, Math.min(100, task.smart ? task.smart.progress : 0)) / 100
+                            width: parent.width * (task.badge ? task.badge.progress : 0)
                             height: parent.height
                             radius: parent.radius
                             color: design.acc
