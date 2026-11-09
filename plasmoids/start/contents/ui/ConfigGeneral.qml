@@ -30,6 +30,9 @@ KCM.SimpleKCM {
     property string cfg_workspaces
     property bool cfg_showDividers
     property bool cfg_showPower
+    property bool cfg_showDesktopCorner
+    property bool cfg_showNowPlaying
+    property bool cfg_showMenuPower
     property string cfg_alignment
     property int cfg_iconSize
     property bool cfg_expand
@@ -50,6 +53,9 @@ KCM.SimpleKCM {
     property string cfg_workspacesDefault
     property bool cfg_showDividersDefault
     property bool cfg_showPowerDefault
+    property bool cfg_showDesktopCornerDefault
+    property bool cfg_showNowPlayingDefault
+    property bool cfg_showMenuPowerDefault
     property string cfg_alignmentDefault
     property int cfg_iconSizeDefault
     property bool cfg_expandDefault
@@ -293,6 +299,46 @@ KCM.SimpleKCM {
             checked: cfg_showPower
             onToggled: {
                 cfg_showPower = checked;
+                page.touch();
+            }
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Show desktop:"
+            text: "Show the desktop corner at the far right"
+            checked: cfg_showDesktopCorner
+            onToggled: {
+                cfg_showDesktopCorner = checked;
+                page.touch();
+            }
+        }
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+            text: "A thin strip after the power button: click it to show the "
+                + "desktop, click again to bring your windows back."
+        }
+
+        // ==== Start menu
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Start menu"
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Media:"
+            text: "Show what's playing"
+            checked: cfg_showNowPlaying
+            onToggled: {
+                cfg_showNowPlaying = checked;
+                page.touch();
+            }
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Power:"
+            text: "Show the power button (bottom right)"
+            checked: cfg_showMenuPower
+            onToggled: {
+                cfg_showMenuPower = checked;
                 page.touch();
             }
         }

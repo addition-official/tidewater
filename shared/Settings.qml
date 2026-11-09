@@ -14,7 +14,8 @@
 // offerLegacy); everything else stays at the defaults below.
 //
 // Every default reproduces Tidewater's look from before these options existed,
-// except showAllDesktops: each desktop now shows only its own windows.
+// except showAllDesktops (each desktop now shows only its own windows) and
+// showDesktopCorner (the "show desktop" strip is new, and off unless chosen).
 pragma Singleton
 import QtQuick
 
@@ -30,6 +31,10 @@ QtObject {
     property string workspaces: "numbers"    // numbers, dots, hidden
     property bool showDividers: true
     property bool showPower: true
+    property bool showDesktopCorner: false   // thin "show desktop" strip at the far right
+    // start menu
+    property bool showNowPlaying: true
+    property bool showMenuPower: true
     // taskbar
     property string alignment: "center"      // center, left
     property int iconSize: 28
@@ -55,6 +60,9 @@ QtObject {
             workspaces: "numbers",
             showDividers: true,
             showPower: true,
+            showDesktopCorner: false,
+            showNowPlaying: true,
+            showMenuPower: true,
             alignment: "center",
             iconSize: 28,
             expand: true,

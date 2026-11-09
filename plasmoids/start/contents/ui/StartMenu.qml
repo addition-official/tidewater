@@ -8,6 +8,9 @@ import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.extras as PlasmaExtras
 import "common"
+// ~/.local/share/tidewater/qml (install.sh puts it there): Tidewater's
+// settings, shared by every Tidewater widget.
+import "../../../../../tidewater/qml"
 
 Item {
     id: sm
@@ -620,8 +623,9 @@ Item {
                 }
             }
 
-            // now playing
+            // now playing (can be hidden in Tidewater's settings)
             Item {
+                visible: Settings.showNowPlaying
                 width: parent.width
                 height: player.implicitHeight + 28
                 readonly property var m: sm.app.media
@@ -760,8 +764,10 @@ Item {
         }
 
         // Power: the same shut down / restart / log out screen as the panel's power button
+        // (can be hidden in Tidewater's settings)
         Rectangle {
             id: powerButton
+            visible: Settings.showMenuPower
             x: 20
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 22

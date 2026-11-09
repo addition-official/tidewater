@@ -84,7 +84,8 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
 - **Taskbar:** live window previews on hover (in a rounded card), drag icons
   to reorder them, pinned apps, left or centered icons. Clicking an app with
   several windows opens its card at once, so you pick the window; the long
-  dot under an app marks which of its windows is active
+  dot under an app marks which of its windows is active. Unread counts and
+  progress (downloads, copies) that apps report show on their icons
 - **Start menu** (click the button or press Meta): search across apps, files
   and actions (type `>` for actions), pinned apps, categories, recent files,
   now playing, CPU/memory/storage/GPU. Right-click an app to pin it, or for
@@ -109,6 +110,9 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
     picture (SVG, PNG, JPEG, WebP)
   - Search: icon and "Search", icon only, or hidden
   - overview button, dividers, power button: shown or hidden
+  - show desktop corner: a thin strip at the far right that shows the
+    desktop (off by default)
+  - start menu: what's playing and the power button, shown or hidden
   - desktops: numbered pills, dots, or hidden
   - taskbar: icons centered or on the left, icon size, fill the bar, and
     whether each desktop shows only its own apps (the default) or every

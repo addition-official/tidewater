@@ -18,6 +18,11 @@
     <entry name="workspaces" type="String"><default>numbers</default></entry>
     <entry name="showDividers" type="Bool"><default>true</default></entry>
     <entry name="showPower" type="Bool"><default>true</default></entry>
+    <!-- thin "show desktop" strip at the far right of the panel -->
+    <entry name="showDesktopCorner" type="Bool"><default>false</default></entry>
+    <!-- start menu: now playing card and power button (right column) -->
+    <entry name="showNowPlaying" type="Bool"><default>true</default></entry>
+    <entry name="showMenuPower" type="Bool"><default>true</default></entry>
     <!-- taskbar (these used to be the taskbar's own settings) -->
     <entry name="alignment" type="String"><default>center</default></entry>
     <entry name="iconSize" type="Int"><default>28</default></entry>

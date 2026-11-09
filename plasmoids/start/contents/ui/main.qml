@@ -104,7 +104,7 @@ PlasmoidItem {
         }
     }
 
-    function refreshAll() { py("apps"); py("recent"); py("stats"); py("media"); py("taskbar-pins"); }
+    function refreshAll() { py("apps"); py("recent"); py("stats"); if (Settings.showNowPlaying) py("media"); py("taskbar-pins"); }
     Component.onCompleted: {
         Launchers.add(root);
         py("apps");
@@ -115,7 +115,7 @@ PlasmoidItem {
         interval: 2000
         running: root.expanded
         repeat: true
-        onTriggered: { root.py("stats"); root.py("media"); }
+        onTriggered: { root.py("stats"); if (Settings.showNowPlaying) root.py("media"); }
     }
 
     // ---- actions --------------------------------------------------------------
