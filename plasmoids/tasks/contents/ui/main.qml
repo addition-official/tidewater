@@ -818,19 +818,19 @@ PlasmoidItem {
                         }
                     }
 
-                    // Progress the app reports (a download, a copy): a thin bar
-                    // across the bottom of the button.
+                    // Under the button: a dot per window, the focused window's dot
+                    // drawn as a long accent bar. While the app reports progress (a
+                    // download, a copy), a progress bar takes their place, like Windows.
                     Rectangle {
                         visible: task.showProgress
                         anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 2
-                        width: root.iconSize
+                        y: parent.height + 1
+                        width: Math.round(root.iconSize * 0.9)
                         height: 3
                         radius: 1.5
-                        color: design.alpha(design.fg, 0.2)
+                        color: design.alpha(design.fg, 0.25)
                         Rectangle {
-                            width: parent.width * (task.badge ? task.badge.progress : 0)
+                            width: Math.max(parent.height, parent.width * (task.badge ? task.badge.progress : 0))
                             height: parent.height
                             radius: parent.radius
                             color: design.acc
@@ -841,10 +841,8 @@ PlasmoidItem {
                             }
                         }
                     }
-
-                    // Under the button: a dot per window, the focused window's dot
-                    // drawn as a long accent bar.
                     Row {
+                        visible: !task.showProgress
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: parent.height + 1
                         spacing: 3
