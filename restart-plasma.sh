@@ -14,9 +14,14 @@ die() { printf '\033[1;31mxx\033[0m  %s\n' "$*" >&2; exit 1; }
 [ "$(id -u)" != 0 ] || die "Run this as your normal user, not with sudo."
 
 running() { pgrep -u "$(id -u)" -x plasmashell >/dev/null; }
+# Plasma holds the D-Bus name org.kde.plasmashell from late in its startup
+# until just after it quits.
+bus_free() { ! busctl --user status org.kde.plasmashell >/dev/null 2>&1; }
 
 stop_plasma() {
     running || return 0
+    # still starting (no D-Bus name yet): let it finish first, see start_plasma
+    for _ in $(seq 1 40); do bus_free || break; sleep 0.25; done
     if systemctl --user is-active --quiet plasma-plasmashell.service 2>/dev/null; then
         systemctl --user stop plasma-plasmashell.service 2>/dev/null
     fi
@@ -28,14 +33,11 @@ stop_plasma() {
     return 1
 }
 
-# The old Plasma can still hold its D-Bus name for a moment after the process
-# is gone. A new one started in that moment can crash on startup (Plasma then
-# restarts itself, but shows a crash report): wait for the name to be free,
-# then give the session a second to settle.
-bus_free() { ! busctl --user status org.kde.plasmashell >/dev/null 2>&1; }
-
 start_plasma() {
     running && return 0
+    # The old Plasma can still hold its name for a moment after the process is
+    # gone, and a new one started then can crash on startup: wait, then give
+    # the session a second to settle.
     for _ in $(seq 1 20); do bus_free && break; sleep 0.25; done
     sleep 1
     # kstart is what reliably brings Plasma back, however it was started before.
@@ -46,8 +48,14 @@ start_plasma() {
     else
         setsid plasmashell >/dev/null 2>&1 &
     fi
-    for _ in $(seq 1 40); do running && return 0; sleep 0.25; done
-    return 1
+    for _ in $(seq 1 40); do running && break; sleep 0.25; done
+    running || return 1
+    # Return only once it has really started (it takes its D-Bus name late in
+    # startup). Install restarts Plasma twice in a row, and asking a Plasma
+    # that is still starting to quit can be ignored (Plasma didn't stop) or
+    # crash it.
+    for _ in $(seq 1 60); do bus_free || return 0; sleep 0.25; done
+    return 0
 }
 
 case "${1:-restart}" in
