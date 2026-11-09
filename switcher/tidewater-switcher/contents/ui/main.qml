@@ -80,12 +80,20 @@ KWin.TabBoxSwitcher {
                 // window with X would otherwise shrink the panel, and the next click
                 // could land outside it, which KWin treats as "cancel" and closes
                 // the switcher. (A fresh popup is made each time Alt+Tab opens.)
-                property real keptW: 0
-                property real keptH: 0
-                onFitWChanged: keptW = Math.max(keptW, fitW)
-                onFitHChanged: keptH = Math.max(keptH, fitH)
-                readonly property real wantW: Math.max(keptW, fitW)
-                readonly property real wantH: Math.max(keptH, fitH)
+                // Plain values set by grow(), not bindings: the popup reads the
+                // size back while it is being changed, and with a binding Qt saw
+                // that as a binding loop. They start at the smallest size the
+                // panel can have, so it is never empty.
+                property real wantW: 240 + 2 * tabBox.pad
+                property real wantH: 120 + 2 * tabBox.pad
+                function grow() {
+                    if (fitW > wantW)
+                        wantW = fitW;
+                    if (fitH > wantH)
+                        wantH = fitH;
+                }
+                onFitWChanged: grow()
+                onFitHChanged: grow()
                 width: content.wantW
                 height: content.wantH
                 implicitWidth: content.wantW
@@ -355,7 +363,11 @@ KWin.TabBoxSwitcher {
                     function onModelChanged(): void { wall.layout(); }
                 }
 
-                Component.onCompleted: wall.layout()
+                // (also where the size starts from what the cards need: see grow())
+                Component.onCompleted: {
+                    wall.layout();
+                    content.grow();
+                }
 
                 PlasmaComponents3.Label {
                     anchors.centerIn: parent
