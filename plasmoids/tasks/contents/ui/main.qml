@@ -62,7 +62,13 @@ PlasmoidItem {
         groupMode: TaskManager.TasksModel.GroupApplications
         groupInline: false
         sortMode: TaskManager.TasksModel.SortManual
-        separateLaunchers: false
+        // Pinned apps keep their places, also while running and after Plasma
+        // restarts: launchInPlace puts a running pinned app in its pin's slot,
+        // but Plasma only does that with separateLaunchers on (as its own
+        // icons-only taskbar has it). With it off, running pinned apps came back
+        // in the order their windows opened, and the next drag saved that order.
+        // Open apps that aren't pinned go after the pinned ones.
+        separateLaunchers: true
         launchInPlace: true
         hideActivatedLaunchers: true
         onLauncherListChanged: Plasmoid.configuration.launchers = launcherList
