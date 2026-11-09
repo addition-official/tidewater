@@ -112,7 +112,7 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   - overview button, dividers, power button: shown or hidden
   - show desktop corner: a thin strip at the far right that shows the
     desktop (off by default)
-  - start menu: what's playing and the power button, shown or hidden
+  - start menu: what's playing and its own power button, shown or hidden
   - desktops: numbered pills, dots, or hidden
   - taskbar: icons centered or on the left, icon size, fill the bar, and
     whether each desktop shows only its own apps (the default) or every

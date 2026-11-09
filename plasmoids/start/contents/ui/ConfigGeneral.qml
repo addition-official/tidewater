@@ -295,7 +295,7 @@ KCM.SimpleKCM {
         }
         QQC2.CheckBox {
             Kirigami.FormData.label: "Power:"
-            text: "Show the power button"
+            text: "Show the power button on the panel (far right)"
             checked: cfg_showPower
             onToggled: {
                 cfg_showPower = checked;
@@ -335,7 +335,7 @@ KCM.SimpleKCM {
         }
         QQC2.CheckBox {
             Kirigami.FormData.label: "Power:"
-            text: "Show the power button (bottom right)"
+            text: "Show the power button inside the start menu"
             checked: cfg_showMenuPower
             onToggled: {
                 cfg_showMenuPower = checked;
