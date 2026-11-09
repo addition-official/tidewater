@@ -64,6 +64,24 @@ PlasmoidItem {
 
     toolTipMainText: Qt.formatDate(now, Qt.locale().dateFormat(Locale.LongFormat))
 
+    // The big date in the calendar ("November 8, 2026" or "8 November 2026"):
+    // day and month in the same order as the panel's date format, so a
+    // month-first choice like "ddd, MMM d" gives a month-first date here too.
+    // If that format has no day or month, the order of Region & Language.
+    function monthFirst(fmt) {
+        // the parts outside 'quoted text'; a day is d or dd (ddd/dddd is the weekday)
+        const parts = String(fmt || "").replace(/'[^']*'/g, "").match(/d+|M+/g) || [];
+        const day = parts.findIndex(t => t[0] === "d" && t.length <= 2);
+        const month = parts.findIndex(t => t[0] === "M");
+        return day >= 0 && month >= 0 ? month < day : null;
+    }
+    readonly property string longDateFormat: {
+        let first = monthFirst(Settings.dateFormat);
+        if (first === null)
+            first = monthFirst(Qt.locale().dateFormat(Locale.LongFormat)) === true;
+        return first ? "MMMM d, yyyy" : "d MMMM yyyy";
+    }
+
     // These options used to be saved in this clock's own settings. Hand them
     // to the start widget, which moves them into Tidewater's settings once.
     Component.onCompleted: Settings.offerLegacy("clock", {
@@ -258,7 +276,7 @@ PlasmoidItem {
                     color: design.mut
                 }
                 Text {
-                    text: Qt.formatDate(root.now, "d MMMM yyyy")
+                    text: Qt.formatDate(root.now, root.longDateFormat)
                     font.family: design.font
                     font.pixelSize: 20
                     font.weight: Font.Medium
