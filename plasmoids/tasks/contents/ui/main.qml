@@ -105,6 +105,33 @@ PlasmoidItem {
     // windows of a group mention it, so they are worked out again.
     property int modelRev: 0
 
+    // ---- badges and progress -------------------------------------
+    // Unread counts and progress (downloads, copies) that apps report, the way
+    // Plasma's own taskbar shows them. The object that tracks them comes from
+    // Plasma's taskbar plugin; it is made at run time, so if the plugin is
+    // missing or renamed the taskbar still works, just without badges.
+    // Plasma 6.3 and newer name the module after the applet, older 6.x used a
+    // private name: try both, and remember which one worked.
+    readonly property var smartModules: ["plasma.applet.org.kde.plasma.taskmanager", "org.kde.plasma.private.taskmanager"]
+    property int smartModule: -1        // index into smartModules; -2: none works
+    function makeSmartLauncher(t) {
+        if (smartModule === -2)
+            return null;
+        const tries = smartModule >= 0 ? [smartModule] : smartModules.map((_, i) => i);
+        for (const i of tries) {
+            const c = Qt.createComponent(smartModules[i], "SmartLauncherItem");
+            const o = c.status === Component.Ready ? c.createObject(t) : null;
+            c.destroy();
+            if (o) {
+                smartModule = i;
+                o.launcherUrl = Qt.binding(() => t.model.LauncherUrlWithoutIcon || "");
+                return o;
+            }
+        }
+        smartModule = -2;
+        return null;
+    }
+
     // ---- drag to reorder -------------------------------------------
     // The drag lives here, not in a delegate: moving a row in Plasma's task
     // model can re-sort or rebuild delegates, and a MouseArea inside the
@@ -605,6 +632,11 @@ PlasmoidItem {
                             root.leaveTask(hovered ? root.hoveredTask : task);
                     }
                     readonly property string key: root.keyFor(model.LauncherUrlWithoutIcon, model.WinIdList)
+                    // unread count and progress the app reports (null: unavailable)
+                    property QtObject smart: null
+                    Component.onCompleted: smart = root.makeSmartLauncher(task)
+                    readonly property int badgeCount: smart && smart.countVisible ? smart.count : 0
+                    readonly property bool showProgress: !!smart && smart.progressVisible && !isLauncher
                     readonly property bool beingDragged: root.dragging && root.dragKey === key
 
                     // Which dot (one per window, at most 4) is the long bar: the
@@ -658,7 +690,7 @@ PlasmoidItem {
                             anchors.fill: parent
                             radius: parent.radius
                             color: design.r.warning
-                            opacity: task.model.IsDemandingAttention ? 0.25 : 0
+                            opacity: task.model.IsDemandingAttention || (task.smart && task.smart.urgent) ? 0.25 : 0
                         }
                     }
 
@@ -674,6 +706,54 @@ PlasmoidItem {
                         height: root.iconSize
                         source: task.model.decoration
                         opacity: task.model.IsStartup ? 0.5 : 1
+
+                        // Unread count, on the icon's top-right corner (99+ past 99).
+                        Rectangle {
+                            visible: task.badgeCount > 0
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: -Math.round(width / 3)
+                            anchors.topMargin: -Math.round(height / 3)
+                            height: Math.max(14, Math.round(16 * root.k))
+                            width: Math.max(height, badgeText.implicitWidth + 8)
+                            radius: height / 2
+                            color: design.acc
+                            border.width: 1
+                            border.color: design.surface
+                            Text {
+                                id: badgeText
+                                anchors.centerIn: parent
+                                text: task.badgeCount > 99 ? "99+" : String(task.badgeCount)
+                                font.family: design.font
+                                font.pixelSize: Math.max(9, Math.round(10 * root.k))
+                                font.weight: Font.Medium
+                                color: design.accFg
+                            }
+                        }
+                    }
+
+                    // Progress the app reports (a download, a copy): a thin bar
+                    // across the bottom of the button.
+                    Rectangle {
+                        visible: task.showProgress
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 2
+                        width: root.iconSize
+                        height: 3
+                        radius: 1.5
+                        color: design.alpha(design.fg, 0.2)
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(100, task.smart ? task.smart.progress : 0)) / 100
+                            height: parent.height
+                            radius: parent.radius
+                            color: design.acc
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 200
+                                }
+                            }
+                        }
                     }
 
                     // Under the button: a dot per window, the focused window's dot
