@@ -71,15 +71,18 @@ PlasmoidItem {
         Launchers.remove(root);
         Settings.removeOwner(root);
     }
+    // Always root.expanded here: the signal also hands in a value named
+    // "expanded", and leaning on that is deprecated in Qt 6 (and assigning to
+    // it would only change that copy, not close the popup).
     onExpandedChanged: {
-        if (!expanded) return;
+        if (!root.expanded) return;
         if (onScreen()) {
             // Just after Plasma (re)starts the panel may still be moving into
             // place, and a popup placed now can land in the corner: open it
             // again a moment later, once the panel has settled.
             const early = 1500 - (Date.now() - shownAt);
             if (early > 0 && !settled) {
-                expanded = false;
+                root.expanded = false;
                 // asked again while waiting: that is a second click, so close
                 if (settleOpen.running) {
                     settleOpen.stop();
@@ -97,7 +100,7 @@ PlasmoidItem {
         // would put the popup at the top-left. Open the on-screen copy instead.
         const other = Launchers.onScreenOne(root);
         if (other) {
-            expanded = false;
+            root.expanded = false;
             other.expanded = true;
         } else {
             refreshAll();                // no better copy: open this one as usual

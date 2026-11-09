@@ -140,7 +140,7 @@ PlasmoidItem {
         triggeredOnStart: true
         onTriggered: root.refresh()
     }
-    onExpandedChanged: if (expanded) refresh()
+    onExpandedChanged: if (root.expanded) refresh()
 
     // ---- which icon for which state ---------------------------------------------
     function wifiGlyph(strength) {

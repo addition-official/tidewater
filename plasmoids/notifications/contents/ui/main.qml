@@ -159,8 +159,9 @@ PlasmoidItem {
         for (let i = history.count - 1; i >= 0; --i) history.close(history.index(i, 0));
     }
 
+    // root.expanded, not the signal's injected "expanded" (deprecated in Qt 6)
     onExpandedChanged: {
-        if (expanded) {
+        if (root.expanded) {
             root.now = Date.now();
         } else {
             ReadMark.lastRead = new Date().toISOString();
