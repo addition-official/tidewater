@@ -390,6 +390,8 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: "Icon size:"
             spacing: Kirigami.Units.largeSpacing
             QQC2.Slider {
+                // scrolling the page over it must not change it
+                wheelEnabled: false
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 from: 18
                 to: 36
@@ -428,6 +430,8 @@ KCM.SimpleKCM {
             }
         }
         QQC2.ComboBox {
+            // scrolling the page over it must not change it
+            wheelEnabled: false
             Kirigami.FormData.label: "Hours:"
             readonly property var modes: ["system", "24h", "12h"]
             model: ["Same as system", "24-hour (17:43)", "12-hour (5:43 PM)"]
@@ -447,6 +451,8 @@ KCM.SimpleKCM {
             }
         }
         QQC2.ComboBox {
+            // scrolling the page over it must not change it
+            wheelEnabled: false
             id: presetBox
             Kirigami.FormData.label: "Date format:"
             enabled: cfg_showDate
