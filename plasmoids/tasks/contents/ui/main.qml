@@ -783,27 +783,37 @@ PlasmoidItem {
                         source: task.model.decoration
                         opacity: task.model.IsStartup ? 0.5 : 1
 
-                        // Unread count, on the icon's top-right corner (99+ past 99).
+                        // Unread count, on the icon's top-right corner (99+ past 99):
+                        // red with bold white digits, like an unread badge anywhere,
+                        // inside the button, with a ring in the color behind it that
+                        // separates it from the icon.
                         Rectangle {
+                            id: badgeRing
                             visible: task.badgeCount > 0
+                            readonly property int h: Math.max(15, Math.round(root.iconSize * 0.5))
+                            readonly property bool wide: task.badgeCount > 99
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.rightMargin: -Math.round(width / 3)
-                            anchors.topMargin: -Math.round(height / 3)
-                            height: Math.max(14, Math.round(16 * root.k))
-                            width: Math.max(height, badgeText.implicitWidth + 8)
-                            radius: height / 2
-                            color: design.acc
-                            border.width: 1
-                            border.color: design.surface
-                            Text {
-                                id: badgeText
-                                anchors.centerIn: parent
-                                text: task.badgeCount > 99 ? "99+" : String(task.badgeCount)
-                                font.family: design.font
-                                font.pixelSize: Math.max(9, Math.round(10 * root.k))
-                                font.weight: Font.Medium
-                                color: design.accFg
+                            anchors.rightMargin: -Math.round(h * 0.3)
+                            anchors.topMargin: -Math.round(h * 0.3)
+                            height: h
+                            width: Math.max(h, badgeText.implicitWidth + Math.round(h * 0.55))
+                            radius: h / 2
+                            color: task.isActive ? design.accC : task.hovered ? design.s2 : Kirigami.Theme.backgroundColor
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 1.5
+                                radius: height / 2
+                                color: "#e0393e"
+                                Text {
+                                    id: badgeText
+                                    anchors.centerIn: parent
+                                    text: badgeRing.wide ? "99+" : String(task.badgeCount)
+                                    font.family: design.font
+                                    font.pixelSize: Math.round(badgeRing.h * (badgeRing.wide ? 0.58 : 0.66))
+                                    font.bold: true
+                                    color: "white"
+                                }
                             }
                         }
                     }
