@@ -28,8 +28,16 @@ stop_plasma() {
     return 1
 }
 
+# The old Plasma can still hold its D-Bus name for a moment after the process
+# is gone. A new one started in that moment can crash on startup (Plasma then
+# restarts itself, but shows a crash report): wait for the name to be free,
+# then give the session a second to settle.
+bus_free() { ! busctl --user status org.kde.plasmashell >/dev/null 2>&1; }
+
 start_plasma() {
     running && return 0
+    for _ in $(seq 1 20); do bus_free && break; sleep 0.25; done
+    sleep 1
     # kstart is what reliably brings Plasma back, however it was started before.
     if command -v kstart >/dev/null 2>&1; then
         setsid kstart plasmashell >/dev/null 2>&1 &
