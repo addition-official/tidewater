@@ -26,7 +26,15 @@ Item {
     readonly property color danger: r.error
 
     readonly property var families: Qt.fontFamilies()
-    readonly property string font: families.indexOf("Rubik") >= 0 ? "Rubik" : Kirigami.Theme.defaultFont.family
+    // Segoe UI when it is installed on this computer (Tidewater can't ship it:
+    // Microsoft's license doesn't allow that), else Inter (which Tidewater
+    // installs), else Plasma's own font.
+    readonly property string font: {
+        for (const f of ["Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Inter Variable", "Inter"])
+            if (families.indexOf(f) >= 0)
+                return f;
+        return Kirigami.Theme.defaultFont.family;
+    }
     readonly property bool hasIconFont: families.indexOf("Material Symbols Rounded") >= 0
 
     function alpha(c, a) { const q = Qt.color(c); return Qt.rgba(q.r, q.g, q.b, a); }

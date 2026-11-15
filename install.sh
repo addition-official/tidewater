@@ -121,8 +121,9 @@ say "Backed up your current setup to $BACKUP"
 FONTDIR="$HOME/.local/share/fonts/tidewater"
 mkdir -p "$FONTDIR"
 cp fonts/*.ttf "$FONTDIR/"
+rm -f "$FONTDIR/Rubik.ttf"                  # replaced by Inter in 0.3
 have fc-cache && fc-cache -f "$FONTDIR" >/dev/null 2>&1 || true
-say "Installed fonts: Rubik, Material Symbols Rounded"
+say "Installed fonts: Inter, Material Symbols Rounded (Segoe UI is used instead of Inter if you have it installed)"
 
 # ---- shared settings module ----------------------------------------------------
 # Tidewater's settings (shared/Settings.qml). Every widget imports this folder

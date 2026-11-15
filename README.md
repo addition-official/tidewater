@@ -127,7 +127,9 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   you use another menu instead, the taskbar and clock keep the settings they
   had, but there is no page to change them. Settings made in an older
   version's taskbar or clock settings are moved over by themselves.
-- Light and dark color schemes; Rubik and Material Symbols fonts
+- Light and dark color schemes; Inter and Material Symbols fonts. If Segoe UI
+  is installed (for example copied from your own Windows install into
+  `~/.local/share/fonts`), Tidewater uses it instead of Inter
 
 ![Alt+Tab with 16 and with 30 windows](preview-alttab.png)
 
@@ -176,7 +178,7 @@ Logs and the widgets' data, for bug reports:
 - `plasmoids/start/contents/code/menu.py`     start menu: apps, recent files, stats, media
 - `switcher/`     Alt+Tab
 - `layout.js`     the panel arrangement (a Plasma desktop script)
-- `colors/`, `fonts/`  color schemes; Rubik and Material Symbols
+- `colors/`, `fonts/`  color schemes; Inter and Material Symbols
 
 ## A note on how this was built
 
@@ -209,5 +211,5 @@ from it and were modified for Tidewater:
 - the Alt+Tab switcher: `switcher/tidewater-switcher/`
 - parts of the overall design
 
-Fonts: Rubik (SIL Open Font License, `fonts/OFL-Rubik.txt`) and Material
+Fonts: Inter (SIL Open Font License, `fonts/OFL-Inter.txt`) and Material
 Symbols Rounded (Apache License 2.0, `fonts/LICENSE-MaterialSymbols.txt`).
