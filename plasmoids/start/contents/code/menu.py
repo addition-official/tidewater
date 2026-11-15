@@ -487,9 +487,9 @@ def stats():
 
 # ---- media (MPRIS over the session bus) -------------------------------------------
 
-def busctl_json(args):
+def busctl_json(args, timeout=3):
     try:
-        return json.loads(run(["busctl", "--user", "--json=short"] + args) or "null")
+        return json.loads(run(["busctl", "--user", "--json=short"] + args, timeout) or "null")
     except Exception:
         return None
 
@@ -497,30 +497,48 @@ def busctl_json(args):
 def players():
     names = busctl_json(["call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
                          "org.freedesktop.DBus", "ListNames"])
-    if not names:
+    try:
+        return [n for n in names["data"][0] if isinstance(n, str) and n.startswith("org.mpris.MediaPlayer2.")]
+    except Exception:
         return []
-    return [n for n in names["data"][0] if n.startswith("org.mpris.MediaPlayer2.")]
+
+
+def text(v):
+    """A player's value as plain text: players can send any type."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return ", ".join(text(x) for x in v if x is not None)
+    return str(v)
 
 
 def media():
+    # Players are other programs on the session bus: one that answers slowly,
+    # or with values of an unexpected type, must not hold up or break the card
+    # (or the play/pause buttons, which look up the player here too). Each gets
+    # at most a second, all of them together about two and a half.
     best = None
+    deadline = time.monotonic() + 2.5
     for p in players():
-        props = busctl_json(["call", p, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties",
-                             "GetAll", "s", "org.mpris.MediaPlayer2.Player"])
-        if not props:
+        left = deadline - time.monotonic()
+        if left <= 0.1:
+            break
+        try:
+            props = busctl_json(["call", p, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties",
+                                 "GetAll", "s", "org.mpris.MediaPlayer2.Player"], min(1.0, left))
+            d = props["data"][0]
+            status = (d.get("PlaybackStatus") or {}).get("data", "Stopped")
+            meta = (d.get("Metadata") or {}).get("data") or {}
+            get = lambda k: (meta.get(k) or {}).get("data")
+            info = {
+                "player": p,
+                "title": text(get("xesam:title")),
+                "artist": text(get("xesam:artist")),
+                "art": text(get("mpris:artUrl")),
+                "playing": status == "Playing",
+            }
+        except Exception:
             continue
-        d = props["data"][0]
-        status = d.get("PlaybackStatus", {}).get("data", "Stopped")
-        meta = d.get("Metadata", {}).get("data", {})
-        get = lambda k: (meta.get(k) or {}).get("data")
-        artist = get("xesam:artist") or []
-        info = {
-            "player": p,
-            "title": get("xesam:title") or "",
-            "artist": ", ".join(artist) if isinstance(artist, list) else str(artist),
-            "art": get("mpris:artUrl") or "",
-            "playing": status == "Playing",
-        }
         if not info["title"]:
             continue
         if best is None or (info["playing"] and not best["playing"]):

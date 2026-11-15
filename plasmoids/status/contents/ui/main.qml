@@ -177,6 +177,8 @@ PlasmoidItem {
     }
 
     toolTipMainText: "Quick settings"
+    // the network name comes from the access point: show it as plain text
+    toolTipTextFormat: Text.PlainText
     toolTipSubText: ready ? [st.ethOn ? "Ethernet" : (st.ssid || "No network"),
                              "Volume " + (mutedNow ? "muted" : volNow + "%")].join(" · ") : ""
 
