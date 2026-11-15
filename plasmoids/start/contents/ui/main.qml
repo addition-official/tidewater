@@ -389,10 +389,14 @@ PlasmoidItem {
         id: startMenu
         app: root
         pal: design
+        // A fixed size: Plasma remembers a popup's last size, and would
+        // otherwise keep showing it at an older, bigger one.
         Layout.preferredWidth: 640
         Layout.preferredHeight: 700
         Layout.minimumWidth: 640
         Layout.minimumHeight: 700
+        Layout.maximumWidth: 640
+        Layout.maximumHeight: 700
         Connections {
             target: root
             function onExpandedChanged() { if (root.expanded) startMenu.reset(); }
