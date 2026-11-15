@@ -20,13 +20,13 @@ M="type='signal',interface='com.canonical.Unity.LauncherEntry',member='Update'"
 # Read from busctl through a process substitution, not a pipe: the shell does
 # not wait for it, so this returns the moment the messages are printed
 # (a pipe would wait for busctl's own timeout).
-# Lines are cut at 8 KB before the shell reads them: any program can send this
-# signal, and bash reads a pipe a byte at a time, so a message of many
-# megabytes would keep it busy for seconds. A real one is a few hundred bytes;
-# a cut one is no longer valid JSON and the taskbar skips it.
-# timeout leads its own process group and passes the kill below on to busctl
-# and cut.
-exec 3< <(exec timeout 25 bash -c 'stdbuf -oL busctl --user monitor --json=short --match "$1" 2>/dev/null | stdbuf -oL cut -c1-8192' _ "$M")
+# busctl straight into the shell, with nothing in between: a filter such as
+# cut would hold the lines back on systems whose cut ignores stdbuf (Ubuntu
+# 26.04's Rust coreutils keeps its output until it has a few KB), and no badge
+# would ever arrive. An oversized message from some other program costs the
+# shell time, but timeout ends it within 25 s, and the taskbar ignores lines
+# over 8 KB.
+exec 3< <(exec timeout 25 stdbuf -oL busctl --user monitor --json=short --match "$M" 2>/dev/null)
 pid=$!
 
 # The first message: wait up to busctl's own timeout. After it, collect what
