@@ -12,6 +12,9 @@
 # which keeps the gap between runs short. With no message for about 25
 # seconds it prints nothing and exits, so it never hangs around for long.
 set -u
+# Plain number formatting: with a German or French locale bash writes
+# $EPOCHREALTIME as 123,456 and the time maths below would break.
+export LC_ALL=C
 M="type='signal',interface='com.canonical.Unity.LauncherEntry',member='Update'"
 
 # Read from busctl through a process substitution, not a pipe: the shell does
