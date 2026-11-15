@@ -140,10 +140,15 @@ PlasmoidItem {
         return t.toLowerCase();
     }
     // Each message only carries what changed: merge it into what is known.
+    // Only apps that have a window on the taskbar are kept: any program can
+    // send these messages, and a flood of made-up app names must not pile up.
     function takeLauncherMessages(out) {
         const next = Object.assign({}, badges);
+        const live = liveKeys();
         let changed = false;
         for (const line of String(out || "").split("\n")) {
+            if (line.length > 8192)
+                continue;       // real ones are a few hundred bytes
             let msg;
             try {
                 msg = JSON.parse(line);
@@ -154,7 +159,7 @@ PlasmoidItem {
             if (!Array.isArray(data) || data.length < 2 || typeof data[1] !== "object")
                 continue;
             const key = appKey(data[0]);
-            if (!key)
+            if (!key || !live[key])
                 continue;
             const was = next[key] || { count: 0, countVisible: false, progress: 0, progressVisible: false, urgent: false };
             const b = Object.assign({}, was);
@@ -184,10 +189,8 @@ PlasmoidItem {
     }
     // Apps that quit: forget what they last reported, so an old count doesn't
     // come back when they start again. Run when rows go away.
-    function pruneBadges() {
-        const known = Object.keys(badges);
-        if (known.length === 0)
-            return;
+    // The keys of every app with a window on the taskbar.
+    function liveKeys() {
         const R = TaskManager.AbstractTasksModel;
         const live = {};
         for (let i = 0; i < tasks.count; ++i) {
@@ -198,6 +201,13 @@ PlasmoidItem {
                 if (k)
                     live[k] = true;
         }
+        return live;
+    }
+    function pruneBadges() {
+        const known = Object.keys(badges);
+        if (known.length === 0)
+            return;
+        const live = liveKeys();
         const gone = known.filter(k => !live[k]);
         if (gone.length > 0)
             clearBadge(gone);
@@ -933,6 +943,7 @@ PlasmoidItem {
                         visible: task.isLauncher
                         active: task.isLauncher
                         mainText: task.model.display || task.model.AppName || ""
+                        textFormat: Text.PlainText   // app-supplied name: never markup
                         location: Plasmoid.location
                     }
 
