@@ -140,11 +140,11 @@ PlasmoidItem {
         return t.toLowerCase();
     }
     // Each message only carries what changed: merge it into what is known.
-    // Only apps that have a window on the taskbar are kept: any program can
-    // send these messages, and a flood of made-up app names must not pile up.
+    // Any program can send these messages, so at most the 64 apps heard from
+    // most recently are kept: a flood of made-up app names can't pile up.
+    readonly property int maxBadges: 64
     function takeLauncherMessages(out) {
         const next = Object.assign({}, badges);
-        const live = liveKeys();
         let changed = false;
         for (const line of String(out || "").split("\n")) {
             if (line.length > 8192)
@@ -159,7 +159,7 @@ PlasmoidItem {
             if (!Array.isArray(data) || data.length < 2 || typeof data[1] !== "object")
                 continue;
             const key = appKey(data[0]);
-            if (!key || !live[key])
+            if (!key)
                 continue;
             const was = next[key] || { count: 0, countVisible: false, progress: 0, progressVisible: false, urgent: false };
             const b = Object.assign({}, was);
@@ -175,11 +175,16 @@ PlasmoidItem {
                 b.progressVisible = val("progress-visible") === true;
             if (val("urgent") !== undefined)
                 b.urgent = val("urgent") === true;
+            delete next[key];       // re-added last: the most recent one
             next[key] = b;
             changed = true;
         }
-        if (changed)
-            badges = next;
+        if (!changed)
+            return;
+        const keys = Object.keys(next);
+        for (let i = 0; i < keys.length - maxBadges; ++i)
+            delete next[keys[i]];
+        badges = next;
     }
     // The keys an app's row can be found under: its app id as it is (an id can
     // itself end in ".desktop", like org.telegram.desktop), the same without
@@ -188,16 +193,27 @@ PlasmoidItem {
         return [String(appId || "").toLowerCase(), appKey(appId), appKey(launcherUrl)];
     }
     // Apps that quit: forget what they last reported, so an old count doesn't
-    // come back when they start again. Run when rows go away.
-    // The keys of every app with a window on the taskbar.
+    // come back when they start again. Run when a window closes anywhere (not
+    // on a desktop switch, which only hides this desktop's rows).
+    // Every open window, on any desktop or activity (the taskbar's own list
+    // only has this desktop's), to tell whether an app is still running.
+    TaskManager.TasksModel {
+        id: allWindows
+        filterByVirtualDesktop: false
+        filterByActivity: false
+        filterByScreen: false
+        groupMode: TaskManager.TasksModel.GroupDisabled
+        onRowsRemoved: Qt.callLater(root.pruneBadges)
+    }
+    // The keys of every app that has a window open anywhere.
     function liveKeys() {
         const R = TaskManager.AbstractTasksModel;
         const live = {};
-        for (let i = 0; i < tasks.count; ++i) {
-            const idx = tasks.makeModelIndex(i);
-            if (tasks.data(idx, R.IsLauncher) === true)
+        for (let i = 0; i < allWindows.count; ++i) {
+            const idx = allWindows.makeModelIndex(i);
+            if (allWindows.data(idx, R.IsLauncher) === true)
                 continue;
-            for (const k of rowKeys(tasks.data(idx, R.AppId), tasks.data(idx, R.LauncherUrlWithoutIcon)))
+            for (const k of rowKeys(allWindows.data(idx, R.AppId), allWindows.data(idx, R.LauncherUrlWithoutIcon)))
                 if (k)
                     live[k] = true;
         }
@@ -366,7 +382,6 @@ PlasmoidItem {
             root.modelRev++;
             if (preview.visible)
                 Qt.callLater(root.fillPreview);
-            Qt.callLater(root.pruneBadges);
         }
         function onRowsInserted() {
             root.modelRev++;
