@@ -14,14 +14,17 @@ die() { printf '\033[1;31mxx\033[0m  %s\n' "$*" >&2; exit 1; }
 [ "$(id -u)" != 0 ] || die "Run this as your normal user, not with sudo."
 
 running() { pgrep -u "$(id -u)" -x plasmashell >/dev/null; }
-# Plasma holds the D-Bus name org.kde.plasmashell from late in its startup
-# until just after it quits.
+# Plasma holds the D-Bus name org.kde.plasmashell from early in its startup
+# until just after it quits. Without busctl it can't be checked, and the
+# waits for it below are skipped.
+has_busctl=0
+command -v busctl >/dev/null 2>&1 && has_busctl=1
 bus_free() { ! busctl --user status org.kde.plasmashell >/dev/null 2>&1; }
 
 stop_plasma() {
     running || return 0
     # still starting (no D-Bus name yet): let it finish first, see start_plasma
-    for _ in $(seq 1 40); do bus_free || break; sleep 0.25; done
+    [ "$has_busctl" = 1 ] && for _ in $(seq 1 40); do bus_free || break; sleep 0.25; done
     if systemctl --user is-active --quiet plasma-plasmashell.service 2>/dev/null; then
         systemctl --user stop plasma-plasmashell.service 2>/dev/null
     fi
@@ -38,7 +41,7 @@ start_plasma() {
     # The old Plasma can still hold its name for a moment after the process is
     # gone, and a new one started then can crash on startup: wait, then give
     # the session a second to settle.
-    for _ in $(seq 1 20); do bus_free && break; sleep 0.25; done
+    [ "$has_busctl" = 1 ] && for _ in $(seq 1 20); do bus_free && break; sleep 0.25; done
     sleep 1
     # kstart is what reliably brings Plasma back, however it was started before.
     if command -v kstart >/dev/null 2>&1; then
@@ -50,12 +53,21 @@ start_plasma() {
     fi
     for _ in $(seq 1 40); do running && break; sleep 0.25; done
     running || return 1
-    # Return only once it has really started (it takes its D-Bus name late in
-    # startup). Install restarts Plasma twice in a row, and asking a Plasma
-    # that is still starting to quit can be ignored (Plasma didn't stop) or
-    # crash it.
-    for _ in $(seq 1 60); do bus_free || return 0; sleep 0.25; done
-    return 0
+    [ "$has_busctl" = 1 ] || { sleep 2; running; return; }
+    # Return only once it has started: it has its D-Bus name, then a moment
+    # more to load the panels (it takes the name early). Install restarts
+    # Plasma twice in a row, and asking a Plasma that is still starting to
+    # quit can be ignored ("Plasma didn't stop") or crash it.
+    for _ in $(seq 1 60); do
+        running || return 1          # it crashed while starting
+        if ! bus_free; then
+            sleep 1.5
+            running
+            return
+        fi
+        sleep 0.25
+    done
+    running
 }
 
 case "${1:-restart}" in
