@@ -5,6 +5,7 @@
 // All system access goes through ../code/helper.sh.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import "common"
@@ -253,12 +254,15 @@ PlasmoidItem {
     }
 
     // ---- The card -------------------------------------------------------------
+    // In the manner of Windows 11: buttons three across (switch on the left,
+    // arrow to the settings page on the right), brightness and volume, and a
+    // bottom bar with the connection, System Settings and the power button.
     fullRepresentation: Item {
         id: cardRoot
-        Layout.preferredWidth: 384
-        Layout.minimumWidth: 384
-        Layout.maximumWidth: 384
-        Layout.preferredHeight: card.implicitHeight + 40
+        Layout.preferredWidth: 360
+        Layout.minimumWidth: 360
+        Layout.maximumWidth: 360
+        Layout.preferredHeight: card.implicitHeight
         Layout.minimumHeight: Layout.preferredHeight
         // Exactly as tall as the content: without a maximum, Plasma can make
         // the popup taller (or keep an old, larger size) and leave empty space.
@@ -276,85 +280,51 @@ PlasmoidItem {
             function onVolNowChanged() { if (root.volNow >= 0) vol.set(root.volNow); }
         }
 
+        // a small square icon button (no frame until hovered)
+        component BarIcon: Rectangle {
+            id: bi
+            property string glyph
+            property string fallback
+            property string tip
+            signal clicked()
+            implicitWidth: 36
+            implicitHeight: 36
+            radius: 6
+            color: biArea.containsMouse ? design.tintHover : "transparent"
+            Glyph {
+                anchors.centerIn: parent
+                name: bi.glyph; fallback: bi.fallback
+                size: 20; wght: 300
+                color: design.text1
+                fontAvailable: design.hasIconFont
+            }
+            MouseArea {
+                id: biArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: bi.clicked()
+            }
+            QQC2.ToolTip.visible: biArea.containsMouse && bi.tip !== ""
+            QQC2.ToolTip.text: bi.tip
+            QQC2.ToolTip.delay: 500
+        }
+
         ColumnLayout {
             id: card
             // Pinned to the top, not filling: if the popup ends up taller than
-            // the content, the extra goes below instead of opening gaps between
-            // the sections (e.g. under the tiles).
+            // the content, the extra goes below instead of opening gaps.
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 20
-            spacing: 16
+            spacing: 0
 
-            // Header: avatar, name, host and uptime, settings and power
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                spacing: 12
-
-                Rectangle {
-                    implicitWidth: 40
-                    implicitHeight: 40
-                    radius: 20
-                    color: design.accC
-                    clip: true
-                    Text {
-                        anchors.centerIn: parent
-                        visible: !face.visible
-                        text: (root.st.fullName || root.st.user || "?").charAt(0).toUpperCase()
-                        font.family: design.font
-                        font.pixelSize: 16
-                        font.weight: Font.Medium
-                        color: design.accCFg
-                    }
-                    Image {
-                        id: face
-                        anchors.fill: parent
-                        visible: status === Image.Ready
-                        source: root.st.avatar ? "file://" + root.st.avatar : ""
-                        fillMode: Image.PreserveAspectCrop
-                        sourceSize: Qt.size(80, 80)
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: root.st.user || ""
-                        font.family: design.font
-                        font.pixelSize: 15
-                        font.weight: Font.Medium
-                        color: design.fg
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: [root.st.host, root.uptimeText(root.st.uptime)].filter(s => s).join(" · ")
-                        textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                        font.family: design.font
-                        font.pixelSize: 12
-                        color: design.mut
-                    }
-                }
-
-                IconButton {
-                    pal: design; glyph: "tune"; fallback: "configure"
-                    onClicked: { root.sh("open systemsettings"); root.expanded = false; }
-                }
-                IconButton {
-                    pal: design; glyph: "power_settings_new"; fallback: "system-shutdown"
-                    onClicked: { root.expanded = false; root.sh("power"); }
-                }
-            }
-
-            // Tiles: two columns, the odd one out takes the whole row
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                Layout.topMargin: 20
+                columns: 3
                 columnSpacing: 10
                 rowSpacing: 10
                 uniformCellWidths: true
@@ -362,14 +332,14 @@ PlasmoidItem {
                 Tile {
                     pal: design
                     title: "Wi-Fi"
-                    visible: !!root.st.wifiHw           // no Wi-Fi hardware: no tile
+                    visible: !!root.st.wifiHw           // no Wi-Fi hardware: no button
                     glyph: !root.st.wifiOn ? "wifi_off" : root.wifiGlyph((root.st.signal || 0) / 100)
                     fallback: "network-wireless-symbolic"
                     hasPage: true
                     available: !!root.st.wifiHw
                     on: !!root.st.wifiOn && available
                     subtitle: !root.st.wifiHw ? "No adapter"
-                        : root.st.wifiBlocked ? "Off (hardware switch)"
+                        : root.st.wifiBlocked ? "Off (switch)"
                         : !root.st.wifiOn ? "Off" : (root.st.ssid || "Not connected")
                     onToggled: { root.hold({ wifiOn: !root.st.wifiOn }); root.sh("wifi " + (root.st.wifiOn ? "on" : "off")); }
                     onPageRequested: root.openPage("kcm_networkmanagement")
@@ -384,7 +354,7 @@ PlasmoidItem {
                     available: !!root.st.ethHw
                     on: !!root.st.ethOn
                     subtitle: !root.st.ethHw ? "No adapter" : !root.st.ethOn ? "Disconnected"
-                        : ["Ethernet", root.st.ethSpeed].filter(s => s).join(" · ")
+                        : (root.st.ethSpeed || "Connected")
                     onToggled: root.openPage("kcm_networkmanagement")
                     onPageRequested: root.openPage("kcm_networkmanagement")
                 }
@@ -399,7 +369,7 @@ PlasmoidItem {
                     on: !!root.st.btOn
                     // The kernel sees an adapter the Bluetooth service can't use.
                     readonly property bool stuck: !!root.st.btHw && root.st.btOk === false
-                    subtitle: !root.st.btHw ? "No adapter" : stuck ? "Adapter not responding" : !root.st.btOn ? "Off"
+                    subtitle: !root.st.btHw ? "No adapter" : stuck ? "Not responding" : !root.st.btOn ? "Off"
                         : root.st.btConnected > 0 ? root.st.btConnected + " connected" : "On"
                     onToggled: {
                         if (stuck) { root.openPage("kcm_bluetooth"); return; }
@@ -423,7 +393,7 @@ PlasmoidItem {
                 Tile {
                     pal: design
                     title: "Do not disturb"
-                    glyph: root.st.dnd ? "do_not_disturb_on" : "do_not_disturb_off"
+                    glyph: "notifications_off"
                     fallback: "notifications-disabled-symbolic"
                     on: !!root.st.dnd
                     subtitle: root.st.dnd ? "On" : "Off"
@@ -431,16 +401,14 @@ PlasmoidItem {
                 }
                 Tile {
                     pal: design
-                    title: "Night Light"
-                    // alone on its row when an odd number of tiles is showing
-                    Layout.columnSpan: root.tileCount % 2 === 1 ? 2 : 1
-                    glyph: root.nightState === "suspended" ? "bedtime_off" : root.nightState === "day" ? "light_mode" : "nightlight"
+                    title: "Night light"
+                    glyph: root.nightState === "suspended" ? "bedtime_off" : root.nightState === "day" ? "light_mode" : "dark_mode"
                     fallback: "redshift-status-on"
                     hasPage: true
                     available: !!root.st.nlHw
                     on: root.nightState === "warm" || root.nightState === "day"
                     subtitle: !root.st.nlHw ? "Unavailable" : root.nightState === "off" ? "Off"
-                        : root.nightState === "suspended" ? "Suspended" : root.nightState === "warm" ? "On" : "Daytime"
+                        : root.nightState === "suspended" ? "Paused" : root.nightState === "warm" ? "On" : "Daytime"
                     onToggled: {
                         if (!root.st.nlOn) { root.openPage("kcm_nightlight"); return; }
                         root.hold({ nlInhibited: !root.st.nlInhibited });
@@ -450,45 +418,27 @@ PlasmoidItem {
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.out }
-
-            // Levels
+            // Brightness, then volume
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                Layout.topMargin: 22
+                Layout.bottomMargin: 18
                 spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: root.volNow >= 0
-                    spacing: 10
-                    IconButton {
-                        pal: design; size: 30; glyph: root.volGlyph; fallback: "audio-volume-high-symbolic"
-                        onClicked: root.toggleMute()
-                    }
-                    LevelSlider {
-                        id: vol
-                        pal: design
-                        Layout.fillWidth: true
-                        onMoved: v => root.setVolume(v)
-                    }
-                    IconButton {
-                        pal: design; size: 30; glyph: "chevron_right"; fallback: "go-next-symbolic"
-                        onClicked: root.openPage("kcm_pulseaudio")
-                    }
-                }
 
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.st.bri !== undefined && root.st.bri >= 0
                     spacing: 10
                     Item {
-                        implicitWidth: 30; implicitHeight: 30
+                        implicitWidth: 36; implicitHeight: 36
                         Glyph {
                             anchors.centerIn: parent
                             name: root.brightnessGlyph((root.st.bri || 0) / 100)
                             fallback: "brightness-high-symbolic"
-                            size: 17
-                            color: design.fg
+                            size: 20; wght: 300
+                            color: design.text1
                             fontAvailable: design.hasIconFont
                         }
                     }
@@ -504,10 +454,66 @@ PlasmoidItem {
                             onTriggered: { const v = bri.pending; root.hold({ bri: v }); root.sh("brightness " + v); }
                         }
                     }
-                    IconButton {
-                        pal: design; size: 30; glyph: "chevron_right"; fallback: "go-next-symbolic"
+                    BarIcon {
+                        glyph: "chevron_right"; fallback: "go-next-symbolic"; tip: "Display settings"
                         onClicked: root.openPage("kcm_kscreen")
                     }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.volNow >= 0
+                    spacing: 10
+                    BarIcon {
+                        glyph: root.volGlyph; fallback: "audio-volume-high-symbolic"
+                        tip: root.mutedNow ? "Unmute" : "Mute"
+                        onClicked: root.toggleMute()
+                    }
+                    LevelSlider {
+                        id: vol
+                        pal: design
+                        Layout.fillWidth: true
+                        onMoved: v => root.setVolume(v)
+                    }
+                    BarIcon {
+                        glyph: "speaker_group"; fallback: "audio-card"; tip: "Sound output and settings"
+                        onClicked: root.openPage("kcm_pulseaudio")
+                    }
+                }
+            }
+
+            // Bottom bar: the connection, System Settings, power
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.divider }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 12
+                Layout.preferredHeight: 56
+                spacing: 8
+                Glyph {
+                    name: root.st.ethOn ? "lan" : root.st.wifiOn && root.st.ssid ? "wifi" : "signal_disconnected"
+                    svg: root.st.ethOn ? "ethernet" : ""
+                    fallback: "network-wired-symbolic"
+                    size: 16; wght: 300
+                    color: design.text2
+                    fontAvailable: design.hasIconFont
+                }
+                Text {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: root.st.ethOn ? "Ethernet" : root.st.wifiOn && root.st.ssid ? root.st.ssid : "Not connected"
+                    textFormat: Text.PlainText   // network names come from outside: never render as HTML
+                    font.family: design.font
+                    font.pixelSize: 12
+                    color: design.text2
+                }
+                BarIcon {
+                    glyph: "settings"; fallback: "configure"; tip: "System Settings"
+                    onClicked: { root.sh("open systemsettings"); root.expanded = false; }
+                }
+                BarIcon {
+                    glyph: "power_settings_new"; fallback: "system-shutdown"; tip: "Power"
+                    onClicked: { root.expanded = false; root.sh("power"); }
                 }
             }
         }

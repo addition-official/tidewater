@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// A quick-settings tile: accent-filled while on,
-// gray while off, Material glyph, 14px title, 12px subtitle, chevron to a page.
+// A quick settings button, in the manner of Windows 11: a 48px button with
+// the icon (click to switch on or off), and when there is a settings page,
+// an arrow part on its right that opens it. The name and the state are
+// written under the button. Filled with the accent color while on.
 import QtQuick
 import QtQuick.Layouts
 import "common"
 
-Rectangle {
+Item {
     id: tile
     required property var pal
     property string title
@@ -20,90 +22,110 @@ Rectangle {
     signal toggled()
     signal pageRequested()
 
-    readonly property color ink: on ? pal.accFg : pal.fg
+    readonly property color ink: on ? pal.blueText : pal.text1
 
     Layout.fillWidth: true
-    implicitHeight: column.implicitHeight + 28
-    radius: Math.round(20 * 8 / 28)
+    implicitHeight: button.height + 7 + labels.implicitHeight
     opacity: available ? 1 : 0.5
-    color: on ? pal.acc : (area.containsMouse && available ? pal.s3 : pal.s2)
-    Behavior on color { ColorAnimation { duration: 120 } }
 
-    MouseArea {
-        id: area
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: tile.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: if (tile.available) tile.toggled()
-    }
+    Rectangle {
+        id: button
+        width: parent.width
+        height: 48
+        radius: 8
+        color: tile.on ? (mainArea.containsMouse && tile.available ? Qt.lighter(tile.pal.blue, tile.pal.dark ? 1.08 : 1.12) : tile.pal.blue)
+                       : (mainArea.containsMouse && tile.available ? tile.pal.tintHover : tile.pal.tint)
+        border.width: tile.on ? 0 : 1
+        border.color: tile.pal.stroke
+        Behavior on color { ColorAnimation { duration: 120 } }
 
-    Column {
-        id: column
-        x: 16
-        y: 14
-        width: parent.width - 32
-
+        // the switch part: the whole button, or the part left of the arrow
         Item {
-            width: parent.width
-            height: 24
+            id: mainPart
+            width: tile.hasPage ? parent.width - pagePart.width : parent.width
+            height: parent.height
             Glyph {
+                anchors.centerIn: parent
                 name: tile.glyph
                 fallback: tile.fallback
                 svg: tile.svg
-                size: 24
+                size: 20
+                wght: 300
+                filled: tile.on
                 color: tile.ink
                 fontAvailable: tile.pal.hasIconFont
             }
-            Item {
-                anchors.right: parent.right
-                anchors.rightMargin: -6
-                anchors.verticalCenter: parent.verticalCenter
-                width: 30
-                height: 30
-                visible: tile.hasPage
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 15
-                    color: tile.pal.alpha(tile.ink, pageArea.containsMouse ? 0.15 : 0)
-                }
-                Glyph {
-                    anchors.centerIn: parent
-                    name: "chevron_right"
-                    fallback: "go-next-symbolic"
-                    size: 18
-                    color: tile.ink
-                    opacity: 0.8
-                    fontAvailable: tile.pal.hasIconFont
-                }
-                MouseArea {
-                    id: pageArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: tile.pageRequested()
-                }
+            MouseArea {
+                id: mainArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: tile.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: if (tile.available) tile.toggled()
             }
         }
 
-        Item { width: 1; height: 14 }
+        // the arrow part: opens the settings page
+        Item {
+            id: pagePart
+            visible: tile.hasPage
+            anchors.right: parent.right
+            width: 34
+            height: parent.height
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 4
+                radius: 6
+                color: tile.pal.alpha(tile.ink, pageArea.containsMouse ? 0.12 : 0)
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 1
+                height: 24
+                color: tile.pal.alpha(tile.ink, tile.on ? 0.25 : 0.12)
+            }
+            Glyph {
+                anchors.centerIn: parent
+                name: "chevron_right"
+                fallback: "go-next-symbolic"
+                size: 18
+                wght: 300
+                color: tile.ink
+                fontAvailable: tile.pal.hasIconFont
+            }
+            MouseArea {
+                id: pageArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: tile.pageRequested()
+            }
+        }
+    }
 
+    Column {
+        id: labels
+        anchors.top: button.bottom
+        anchors.topMargin: 7
+        width: parent.width
+        spacing: 1
         Text {
             width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             text: tile.title
             font.family: tile.pal.font
-            font.pixelSize: 14
-            font.weight: Font.Medium
-            color: tile.ink
+            font.pixelSize: 12
+            color: tile.pal.text1
         }
         Text {
             width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             text: tile.subtitle
             textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
             font.family: tile.pal.font
-            font.pixelSize: 12
-            color: tile.on ? tile.pal.alpha(tile.pal.accFg, 0.8) : tile.pal.mut
+            font.pixelSize: 11
+            color: tile.pal.text2
         }
     }
 }

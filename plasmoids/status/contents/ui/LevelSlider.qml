@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// Level slider: 6px track, 18px handle, mono readout.
+// Level slider in the manner of Windows 11: a thin track, a round handle
+// with an accent dot, and the number in a small bubble above the handle
+// while it is dragged or hovered.
 import QtQuick
 import QtQuick.Controls.Basic as B
 
-Row {
+Item {
     id: root
     required property var pal
     property real value: 0
@@ -12,14 +14,12 @@ Row {
     property real to: 100
     readonly property bool pressed: slider.pressed
     signal moved(real value)
-    spacing: 12
+    implicitHeight: 24
     function set(v) { if (!slider.pressed) slider.value = v; }
 
     B.Slider {
         id: slider
-        anchors.verticalCenter: parent.verticalCenter
-        width: root.width - readout.width - root.spacing
-        height: 22
+        anchors.fill: parent
         from: root.from
         to: root.to
         stepSize: 1
@@ -28,35 +28,54 @@ Row {
             x: slider.leftPadding
             y: slider.topPadding + slider.availableHeight / 2 - height / 2
             width: slider.availableWidth
-            height: 6
-            radius: 3
-            color: root.pal.alpha(root.pal.fg, 0.14)
+            height: 4
+            radius: 2
+            color: root.pal.alpha(root.pal.text1, 0.18)
             Rectangle {
                 width: slider.visualPosition * parent.width
                 height: parent.height
                 radius: parent.radius
-                color: root.pal.acc
+                color: root.pal.blue
             }
         }
         handle: Rectangle {
             x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
             y: slider.topPadding + slider.availableHeight / 2 - height / 2
-            width: 18
-            height: 18
-            radius: 9
-            color: root.pal.acc
-            border.width: slider.pressed ? 4 : 0
-            border.color: root.pal.alpha(root.pal.accFg, 0.35)
+            width: 20
+            height: 20
+            radius: 10
+            color: root.pal.dark ? "#3a3b42" : "#ffffff"
+            border.width: 1
+            border.color: root.pal.stroke
+            Rectangle {
+                anchors.centerIn: parent
+                width: slider.pressed ? 8 : slider.hovered ? 12 : 10
+                height: width
+                radius: width / 2
+                color: root.pal.blue
+                Behavior on width { NumberAnimation { duration: 90 } }
+            }
+            // the level, above the handle while it is dragged or hovered
+            Rectangle {
+                visible: slider.pressed || slider.hovered
+                anchors.bottom: parent.top
+                anchors.bottomMargin: 6
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(30, bubble.implicitWidth + 14)
+                height: 24
+                radius: 4
+                color: root.pal.dark ? "#2c2d33" : "#ffffff"
+                border.width: 1
+                border.color: root.pal.stroke
+                Text {
+                    id: bubble
+                    anchors.centerIn: parent
+                    text: Math.round(slider.value)
+                    font.family: root.pal.font
+                    font.pixelSize: 12
+                    color: root.pal.text1
+                }
+            }
         }
-    }
-    Text {
-        id: readout
-        anchors.verticalCenter: parent.verticalCenter
-        width: 44
-        horizontalAlignment: Text.AlignRight
-        text: Math.round(slider.value)
-        color: root.pal.mut
-        font.family: "monospace"
-        font.pixelSize: 12
     }
 }
