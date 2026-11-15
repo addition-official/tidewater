@@ -786,8 +786,6 @@ PlasmoidItem {
                     }
                     readonly property int badgeCount: badge && badge.countVisible ? badge.count : 0
                     readonly property bool showProgress: !!badge && badge.progressVisible
-                    onIsLauncherChanged: if (isLauncher)
-                        root.clearBadge(badgeKeys)
                     readonly property bool beingDragged: root.dragging && root.dragKey === key
 
                     // Which dot (one per window, at most 4) is the long bar: the
