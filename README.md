@@ -86,10 +86,11 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   several windows opens its card at once, so you pick the window; the long
   dot under an app marks which of its windows is active. Unread counts and
   progress (downloads, copies) that apps report show on their icons
-- **Start menu** (click the button or press Meta): search across apps, files
-  and actions (type `>` for actions), pinned apps, categories, recent files,
-  now playing, CPU/memory/storage/GPU. Right-click an app to pin it, or for
-  its own actions, like a browser's "New private window"
+- **Start menu** (click the button or press Meta), laid out like Windows 11:
+  search across apps, files and actions (type `>` for actions), pinned apps,
+  recommended (recent) files, what's playing, and All apps from A to Z with
+  category filters. Right-click an app to pin it, or for its own actions, like
+  a browser's "New private window"
 - **Quick settings:** Wi-Fi, Ethernet, Bluetooth, microphone, do not disturb,
   night light, volume and brightness
 - **Clock:** a calendar that scrolls smoothly week by week (so the end of one

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The start menu, three panes (928 x 668):
-// a category rail, search with pinned apps and recent files, and a side
-// column with the user, what's playing, system meters and a power button.
+// The start menu (640 x 700), in the manner of Windows 11:
+// search on top; pinned apps and recommended (recent) files; a slim
+// now-playing strip while something plays; your name and the power button
+// at the bottom. "All apps" lists every app A to Z, with filters for the
+// app categories; "More" lists every recent file. Typing searches apps,
+// files and actions (">" for actions only).
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
@@ -17,21 +20,22 @@ Item {
     required property var app      // main.qml's root: data and actions
     required property var pal
 
-    implicitWidth: 928
-    implicitHeight: 668
+    implicitWidth: 640
+    implicitHeight: 700
 
-    property string view: "home"   // home | everything | recent | <category id>
+    property string view: "home"   // home | all | recent
+    property string category: "all"
     property string query: ""
     property int selected: 0
     readonly property bool searching: query.trim().length > 0
     readonly property var results: app.search(query, app.fileResults)
-    readonly property real rs: 8 / 28    // corner rounding (8px) over the designed 28
-
-    function r(designed) { return Math.round(designed * rs); }
+    readonly property int pad: 28          // left and right edge of the content
+    readonly property bool playing: Settings.showNowPlaying && !!(app.media && app.media.title)
 
     function reset() {
         search.text = "";
         view = "home";
+        category = "all";
         selected = 0;
         search.forceActiveFocus();
     }
@@ -43,84 +47,134 @@ Item {
     }
 
     readonly property var categories: [
-        { id: "all", glyph: "apps", label: "All apps" },
-        { id: "internet", glyph: "language", label: "Internet" },
-        { id: "development", glyph: "code", label: "Development" },
-        { id: "multimedia", glyph: "movie", label: "Multimedia" },
-        { id: "games", glyph: "sports_esports", label: "Games" },
-        { id: "utilities", glyph: "folder", label: "Utilities and office" },
-        { id: "system", glyph: "settings_applications", label: "System" }
+        { id: "all", label: "All" },
+        { id: "internet", label: "Internet" },
+        { id: "development", label: "Development" },
+        { id: "multimedia", label: "Multimedia" },
+        { id: "games", label: "Games" },
+        { id: "utilities", label: "Office and tools" },
+        { id: "system", label: "System" }
     ]
+
+    // The All apps list: apps A to Z with a letter heading before each new
+    // first letter (digits and symbols share "#").
+    readonly property var allRows: {
+        const list = (category === "all" ? app.apps : app.inCategory(category)).slice();
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        const rows = [];
+        let last = "";
+        for (const a of list) {
+            const c = a.name.charAt(0).toUpperCase();
+            const letter = c.toLowerCase() !== c ? c : "#";
+            if (letter !== last) {
+                rows.push({ kind: "letter", name: letter });
+                last = letter;
+            }
+            rows.push({ kind: "app", id: a.id, name: a.name, icon: a.icon });
+        }
+        return rows;
+    }
 
     // ---- pieces ---------------------------------------------------------------
 
-    component SectionLabel: Text {
+    component Label: Text {
+        property bool strong: false
         font.family: sm.pal.font
-        font.pixelSize: 12
-        font.weight: Font.Medium
-        font.letterSpacing: 0.6
-        font.capitalization: Font.AllUppercase
-        color: sm.pal.mut
+        font.pixelSize: 13
+        font.weight: strong ? Font.DemiBold : Font.Normal
+        color: sm.pal.text1
+        elide: Text.ElideRight
+        textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
     }
 
-    component Heading: Item {
-        id: heading
+    // A small framed text button with an optional arrow ("All apps >", "< Back").
+    component PillButton: Rectangle {
+        id: pill
         property string text
-        property string link
-        signal linked()
+        property string leading: ""
+        property string trailing: ""
+        signal clicked()
+        width: pillRow.implicitWidth + 20
+        height: 26
+        radius: 6
+        color: pillArea.containsMouse ? sm.pal.tintHover : sm.pal.tint
+        border.width: 1
+        border.color: sm.pal.stroke
+        Row {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 4
+            Glyph {
+                visible: pill.leading !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                name: pill.leading; size: 16; wght: 300
+                color: sm.pal.text1; fontAvailable: sm.pal.hasIconFont
+            }
+            Label { anchors.verticalCenter: parent.verticalCenter; text: pill.text; font.pixelSize: 12 }
+            Glyph {
+                visible: pill.trailing !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                name: pill.trailing; size: 16; wght: 300
+                color: sm.pal.text1; fontAvailable: sm.pal.hasIconFont
+            }
+        }
+        MouseArea {
+            id: pillArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: pill.clicked()
+        }
+    }
+
+    // A section heading with a button on the right ("Pinned ... All apps >").
+    component SectionHeader: Item {
+        id: header
+        property string text
+        property string button
+        property string leading: ""
+        property string trailing: ""
+        signal clicked()
         width: parent ? parent.width : 0
-        height: 22
-        SectionLabel { anchors.verticalCenter: parent.verticalCenter; text: heading.text }
-        Text {
+        height: 28
+        Label { x: 8; anchors.verticalCenter: parent.verticalCenter; text: header.text; strong: true; font.pixelSize: 14 }
+        PillButton {
+            visible: header.button !== ""
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            visible: heading.link.length > 0
-            text: heading.link
-            font.family: sm.pal.font
-            font.pixelSize: 13
-            color: sm.pal.acc
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: heading.linked() }
+            text: header.button; leading: header.leading; trailing: header.trailing
+            onClicked: header.clicked()
         }
     }
 
     component AppTile: Item {
         id: tile
         required property var modelData
-        property bool framed: true
         width: 96
-        height: 100
+        height: 84
         Rectangle {
             anchors.fill: parent
-            radius: sm.r(16)
-            color: tileArea.containsMouse ? sm.pal.s2 : "transparent"
+            anchors.margins: 2
+            radius: 8
+            color: tileArea.containsMouse ? sm.pal.tintHover : "transparent"
         }
-        Rectangle {
-            id: square
+        Kirigami.Icon {
+            id: tileIcon
             anchors.horizontalCenter: parent.horizontalCenter
             y: 14
-            width: 52
-            height: 52
-            radius: sm.r(16)
-            color: tile.framed ? sm.pal.accC : "transparent"
-            Kirigami.Icon {
-                anchors.centerIn: parent
-                width: tile.framed ? 30 : 40
-                height: width
-                source: tile.modelData.icon || "application-x-executable"
-            }
+            width: 32
+            height: 32
+            source: tile.modelData.icon || "application-x-executable"
+            fallback: "application-x-executable"
         }
-        Text {
-            anchors.top: square.bottom
-            anchors.topMargin: 8
-            anchors.horizontalCenter: parent.horizontalCenter
+        Label {
+            anchors.top: tileIcon.bottom
+            anchors.topMargin: 9
+            x: 4
             width: parent.width - 8
             horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
             text: tile.modelData.name
-            textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-            font.family: sm.pal.font
             font.pixelSize: 12
-            color: sm.pal.fg
         }
         MouseArea {
             id: tileArea
@@ -133,131 +187,138 @@ Item {
                 else sm.app.launch(tile.modelData.id);
             }
         }
+        QQC2.ToolTip.visible: tileArea.containsMouse && tile.modelData.name.length > 14
+        QQC2.ToolTip.text: tile.modelData.name
+        QQC2.ToolTip.delay: 700
     }
 
-    component ResultRow: Rectangle {
-        id: result
+    // A recent file: its icon, its name, and "folder · when" under it.
+    component FileRow: Item {
+        id: fileRow
         required property var modelData
-        required property int index
-        readonly property bool isSelected: result.index === sm.selected
-        width: parent ? parent.width : 0
         height: 52
-        radius: sm.r(14)
-        color: isSelected ? sm.pal.accC : (resultArea.containsMouse ? sm.pal.s2 : "transparent")
+        Rectangle {
+            anchors.fill: parent
+            radius: 8
+            color: fileArea.containsMouse ? sm.pal.tintHover : "transparent"
+        }
+        Kirigami.Icon {
+            id: fileIcon
+            x: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32
+            height: 32
+            source: fileRow.modelData.icon || (fileRow.modelData.folder ? "folder" : "text-x-generic")
+            fallback: fileRow.modelData.folder ? "folder" : "text-x-generic"
+        }
+        Column {
+            anchors.left: fileIcon.right
+            anchors.leftMargin: 12
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            Label { width: parent.width; text: fileRow.modelData.name }
+            Label {
+                width: parent.width
+                text: sm.app.fileWhere(fileRow.modelData)
+                font.pixelSize: 12
+                color: sm.pal.text2
+            }
+        }
+        MouseArea {
+            id: fileArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: sm.app.openUrl(fileRow.modelData.url)
+        }
+    }
+
+    // A row in the search results or the All apps list.
+    component ListRow: Item {
+        id: row
+        property var item
+        property bool isSelected: false
+        property bool tall: false
+        signal hovered()
+        width: parent ? parent.width : 0
+        height: tall ? 50 : 40
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: row.isSelected || rowArea.containsMouse ? sm.pal.tintHover : "transparent"
+        }
+        Rectangle {
+            visible: row.isSelected
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3
+            height: 16
+            radius: 1.5
+            color: sm.pal.blue
+        }
         Item {
-            id: resultIcon
+            id: rowIcon
             x: 12
             anchors.verticalCenter: parent.verticalCenter
-            width: 26
-            height: 26
+            width: row.tall ? 28 : 24
+            height: width
             Kirigami.Icon {
                 anchors.fill: parent
-                visible: result.modelData.kind === "app"
-                source: result.modelData.icon || ""
+                visible: row.item.kind !== "action"
+                source: row.item.icon || (row.item.kind === "app" ? "application-x-executable" : "text-x-generic")
+                fallback: row.item.kind === "app" ? "application-x-executable" : "text-x-generic"
             }
             Glyph {
                 anchors.centerIn: parent
-                visible: result.modelData.kind !== "app"
-                name: result.modelData.glyph || ""
-                size: 22
-                color: result.isSelected ? sm.pal.acc : sm.pal.mut
+                visible: row.item.kind === "action"
+                name: row.item.glyph || ""
+                size: 20; wght: 300
+                color: sm.pal.text1
                 fontAvailable: sm.pal.hasIconFont
             }
         }
         Column {
-            anchors.left: resultIcon.right
-            anchors.leftMargin: 14
+            anchors.left: rowIcon.right
+            anchors.leftMargin: 12
+            anchors.right: hint.visible ? hint.left : parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+            Label { width: parent.width; text: row.item.name }
+            Label {
+                visible: row.tall && text.length > 0
+                width: parent.width
+                text: row.item.description || ""
+                font.pixelSize: 12
+                color: sm.pal.text2
+            }
+        }
+        Label {
+            id: hint
+            visible: row.isSelected && sm.searching
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            Text {
-                width: parent.width
-                elide: Text.ElideRight
-                text: result.modelData.name
-                textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                font.family: sm.pal.font
-                font.pixelSize: 14
-                font.weight: Font.Medium
-                color: result.isSelected ? sm.pal.accCFg : sm.pal.fg
-            }
-            Text {
-                visible: text.length > 0
-                width: parent.width
-                elide: Text.ElideRight
-                text: result.modelData.description || ""
-                textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                font.family: sm.pal.font
-                font.pixelSize: 12
-                color: result.isSelected ? sm.pal.alpha(sm.pal.accCFg, 0.75) : sm.pal.mut
-            }
+            text: "Enter to open"
+            font.pixelSize: 12
+            color: sm.pal.text3
         }
         MouseArea {
-            id: resultArea
+            id: rowArea
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onEntered: sm.selected = result.index
+            onEntered: row.hovered()
             onClicked: mouse => {
                 if (mouse.button === Qt.RightButton) {
-                    if (result.modelData.kind === "app")
-                        sm.showAppMenu(result.modelData, result, mouse.x, mouse.y);
+                    if (row.item.kind === "app")
+                        sm.showAppMenu(row.item, row, mouse.x, mouse.y);
                 } else {
-                    sm.activate(result.modelData);
+                    sm.activate(row.item);
                 }
             }
-        }
-    }
-
-    component RecentRow: Rectangle {
-        id: recentRow
-        required property var modelData
-        width: parent ? parent.width : 0
-        height: 40
-        radius: sm.r(14)
-        color: recentArea.containsMouse ? sm.pal.s2 : "transparent"
-        Glyph {
-            id: recentGlyph
-            x: 12
-            anchors.verticalCenter: parent.verticalCenter
-            name: recentRow.modelData.folder ? "folder_open" : "description"
-            fallback: recentRow.modelData.folder ? "folder-open" : "text-x-generic"
-            size: 20
-            color: sm.pal.mut
-            fontAvailable: sm.pal.hasIconFont
-        }
-        Text {
-            anchors.left: recentGlyph.right
-            anchors.leftMargin: 14
-            anchors.right: recentDir.left
-            anchors.rightMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            elide: Text.ElideRight
-            text: recentRow.modelData.name
-            textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-            font.family: sm.pal.font
-            font.pixelSize: 14
-            color: sm.pal.fg
-        }
-        Text {
-            id: recentDir
-            anchors.right: parent.right
-            anchors.rightMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, 200)
-            elide: Text.ElideMiddle
-            text: recentRow.modelData.dir
-            textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-            font.family: "monospace"
-            font.pixelSize: 12
-            color: sm.pal.mut
-        }
-        MouseArea {
-            id: recentArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: sm.app.openUrl(recentRow.modelData.url)
         }
     }
 
@@ -319,468 +380,490 @@ Item {
         }
     }
 
-    // ---- the category rail ----------------------------------------------------
+    // ---- search box ---------------------------------------------------------------
 
-    Item {
-        id: rail
-        width: 78
-        height: parent.height
-        Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: sm.pal.out }
-
-        Column {
-            y: 14
+    Rectangle {
+        id: searchBox
+        x: sm.pad
+        y: 22
+        width: parent.width - 2 * sm.pad
+        height: 38
+        radius: height / 2
+        color: search.activeFocus ? sm.pal.alpha(sm.pal.dark ? "black" : "white", 0.2) : sm.pal.tint
+        border.width: 1
+        border.color: sm.pal.stroke
+        // the focus line along the bottom
+        Rectangle {
+            visible: search.activeFocus
+            anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Repeater {
-                model: sm.categories
-                Rectangle {
-                    id: railButton
-                    required property var modelData
-                    readonly property bool current: (modelData.id === "all" && (sm.view === "home" || sm.view === "everything"))
-                                                    || sm.view === modelData.id
-                    width: 48
-                    height: 48
-                    radius: sm.r(16)
-                    color: current ? sm.pal.acc : railArea.containsMouse ? sm.pal.s3 : "transparent"
-                    Glyph {
-                        anchors.centerIn: parent
-                        name: railButton.modelData.glyph
-                        size: railButton.current ? 24 : 22
-                        color: railButton.current ? sm.pal.accFg : sm.pal.mut
-                        fontAvailable: sm.pal.hasIconFont
-                    }
-                    MouseArea {
-                        id: railArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            search.text = "";
-                            sm.view = railButton.modelData.id === "all" ? "home" : railButton.modelData.id;
-                        }
-                    }
-                    QQC2.ToolTip.visible: railArea.containsMouse
-                    QQC2.ToolTip.text: modelData.label
-                    QQC2.ToolTip.delay: 500
-                }
+            width: parent.width - 2 * parent.radius
+            height: 2
+            radius: 1
+            color: sm.pal.blue
+        }
+        Glyph {
+            id: lens
+            x: 14
+            anchors.verticalCenter: parent.verticalCenter
+            name: "search"; fallback: "search"
+            size: 18; wght: 300
+            color: sm.pal.text2
+            fontAvailable: sm.pal.hasIconFont
+        }
+        QQC2.TextField {
+            id: search
+            anchors.left: lens.right
+            anchors.leftMargin: 8
+            anchors.right: parent.right
+            anchors.rightMargin: 16
+            anchors.verticalCenter: parent.verticalCenter
+            height: 30
+            focus: true
+            color: sm.pal.text1
+            selectionColor: sm.pal.blue
+            selectedTextColor: sm.pal.blueText
+            font.family: sm.pal.font
+            font.pixelSize: 13
+            background: null
+            leftPadding: 2
+            placeholderText: ""
+            onTextChanged: {
+                sm.query = text;
+                sm.selected = 0;
+                sm.app.searchFiles(text);
+            }
+            Keys.onDownPressed: sm.selected = Math.max(0, Math.min(sm.results.length - 1, sm.selected + 1))
+            Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
+            Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
+            Keys.onEnterPressed: sm.activate(sm.results[sm.selected])
+            Keys.onEscapePressed: {
+                if (text.length > 0) text = "";
+                else if (sm.view !== "home") sm.view = "home";
+                else sm.app.close();
             }
         }
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 14
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 48
-            height: 48
-            radius: sm.r(16)
-            color: sm.view === "recent" ? sm.pal.acc : historyArea.containsMouse ? sm.pal.s3 : "transparent"
-            Glyph {
-                anchors.centerIn: parent
-                name: "history"
-                size: 22
-                color: sm.view === "recent" ? sm.pal.accFg : sm.pal.mut
-                fontAvailable: sm.pal.hasIconFont
-            }
-            MouseArea {
-                id: historyArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: { search.text = ""; sm.view = "recent"; }
-            }
+        Label {
+            anchors.left: lens.right
+            anchors.leftMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            visible: search.text.length === 0
+            text: "Search apps and files, or type > for actions"
+            color: sm.pal.text3
         }
     }
 
-    // ---- the middle: search, pinned, recent -------------------------------------
+    // The area between the search box and the bottom bar.
+    Item {
+        id: body
+        x: sm.pad - 8
+        y: searchBox.y + searchBox.height + 22
+        width: parent.width - 2 * (sm.pad - 8)
+        height: footer.y - y - 12
 
-    Column {
-        id: middle
-        x: rail.width + 24
-        y: 22
-        width: parent.width - rail.width - side.width - 48
-        height: parent.height - 44
-        spacing: 20
-
-        Rectangle {
-            width: parent.width
-            height: 48
-            radius: sm.r(16)
-            color: "transparent"
-            border.width: 1
-            border.color: search.activeFocus ? sm.pal.acc : sm.pal.out
-
-            Glyph {
-                id: lens
-                x: 16
-                anchors.verticalCenter: parent.verticalCenter
-                name: "search"
-                fallback: "search"
-                size: 20
-                color: sm.pal.mut
-                fontAvailable: sm.pal.hasIconFont
-            }
-            Rectangle {
-                id: badge
-                anchors.right: parent.right
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                width: badgeText.implicitWidth + 14
-                height: 22
-                radius: sm.r(6)
-                color: sm.pal.s1
-                Text {
-                    id: badgeText
-                    anchors.centerIn: parent
-                    text: "> actions"
-                    font.family: "monospace"
-                    font.pixelSize: 11
-                    color: sm.pal.mut
-                }
-            }
-            QQC2.TextField {
-                id: search
-                anchors.left: lens.right
-                anchors.leftMargin: 10
-                anchors.right: badge.left
-                anchors.rightMargin: 10
-                anchors.verticalCenter: parent.verticalCenter
-                height: 30
-                focus: true
-                color: sm.pal.fg
-                selectionColor: sm.pal.accC
-                selectedTextColor: sm.pal.accCFg
-                font.family: sm.pal.font
-                font.pixelSize: 15
-                background: null
-                leftPadding: 2
-                placeholderText: ""
-                onTextChanged: {
-                    sm.query = text;
-                    sm.selected = 0;
-                    sm.app.searchFiles(text);
-                }
-                Keys.onDownPressed: sm.selected = Math.max(0, Math.min(sm.results.length - 1, sm.selected + 1))
-                Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
-                Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
-                Keys.onEnterPressed: sm.activate(sm.results[sm.selected])
-                Keys.onEscapePressed: {
-                    if (text.length > 0) text = "";
-                    else sm.app.close();
-                }
-            }
-            Text {
-                anchors.left: lens.right
-                anchors.leftMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                visible: search.text.length === 0
-                text: "Search apps, files and actions"
-                font.family: sm.pal.font
-                font.pixelSize: 15
-                color: sm.pal.mut
-            }
-        }
-
-        // search results
-        Column {
-            visible: sm.searching
-            width: parent.width
-            spacing: 2
-            Repeater {
-                model: sm.searching ? sm.results : []
-                ResultRow {}
-            }
-            Text {
-                visible: sm.results.length === 0
-                topPadding: 8
-                leftPadding: 12
-                text: "No matches"
-                font.family: sm.pal.font
-                color: sm.pal.mut
-            }
-        }
-
+        // ---- search results, grouped ----
         Flickable {
-            visible: !sm.searching
-            width: parent.width
-            height: parent.height - 68
-            contentHeight: body.implicitHeight
+            visible: sm.searching
+            anchors.fill: parent
+            contentHeight: resultCol.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-
             Column {
-                id: body
+                id: resultCol
                 width: parent.width
-                spacing: 14
-                readonly property var shown: sm.view === "home" ? sm.app.pinnedApps
-                    : sm.view === "everything" ? sm.app.apps
-                    : sm.view === "recent" ? []
-                    : sm.app.inCategory(sm.view)
-
-                Heading {
-                    visible: sm.view !== "recent"
-                    text: sm.view === "home" ? "Pinned"
-                        : sm.view === "everything" ? "All apps"
-                        : (sm.categories.find(c => c.id === sm.view) || {}).label || ""
-                    link: sm.view === "home" ? "All apps" : "Back"
-                    onLinked: sm.view = sm.view === "home" ? "everything" : "home"
+                Repeater {
+                    model: sm.searching ? sm.results : []
+                    Column {
+                        id: resultEntry
+                        required property var modelData
+                        required property int index
+                        width: resultCol.width
+                        readonly property bool firstOfKind: index === 0 || sm.results[index - 1].kind !== modelData.kind
+                        Item { visible: resultEntry.firstOfKind && resultEntry.index > 0; width: 1; height: 8 }
+                        Label {
+                            visible: resultEntry.firstOfKind
+                            leftPadding: 4
+                            height: 30
+                            verticalAlignment: Text.AlignVCenter
+                            text: resultEntry.modelData.kind === "app" ? "Apps"
+                                : resultEntry.modelData.kind === "file" ? "Files" : "Actions"
+                            font.pixelSize: 12
+                            strong: true
+                            color: sm.pal.text2
+                        }
+                        ListRow {
+                            item: resultEntry.modelData
+                            tall: resultEntry.modelData.kind !== "action"
+                            isSelected: resultEntry.index === sm.selected
+                            onHovered: sm.selected = resultEntry.index
+                        }
+                    }
                 }
+                Label {
+                    visible: sm.results.length === 0
+                    topPadding: 8
+                    leftPadding: 8
+                    text: "No matches"
+                    color: sm.pal.text2
+                }
+            }
+        }
+
+        // ---- home: pinned and recommended ----
+        Item {
+            visible: !sm.searching && sm.view === "home"
+            anchors.fill: parent
+
+            SectionHeader {
+                id: pinnedHeader
+                text: "Pinned"
+                button: "All apps"
+                trailing: "chevron_right"
+                onClicked: sm.view = "all"
+            }
+            // three rows of six; more pinned apps scroll
+            Flickable {
+                id: pinnedArea
+                anchors.top: pinnedHeader.bottom
+                anchors.topMargin: 8
+                width: parent.width
+                height: Math.min(3, Math.ceil(Math.max(1, sm.app.pinnedApps.length) / 6)) * 88
+                contentHeight: pinnedGrid.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
                 Grid {
-                    visible: sm.view !== "recent"
-                    columns: 5
-                    columnSpacing: (body.width - 5 * 96) / 4
+                    id: pinnedGrid
+                    width: parent.width
+                    columns: 6
+                    columnSpacing: (width - 6 * 96) / 5
                     rowSpacing: 4
                     Repeater {
-                        model: body.shown
-                        AppTile { framed: sm.view === "home" }
+                        model: sm.app.pinnedApps
+                        AppTile {}
                     }
                 }
-                Heading {
-                    visible: sm.view === "home" || sm.view === "recent"
-                    text: "Recent"
+                Label {
+                    visible: sm.app.pinnedApps.length === 0
+                    x: 8
+                    y: 8
+                    text: "Right-click an app in All apps to pin it here."
+                    color: sm.pal.text2
+                }
+            }
+
+            SectionHeader {
+                id: recHeader
+                anchors.top: pinnedArea.bottom
+                anchors.topMargin: 18
+                text: "Recommended"
+                button: sm.app.recent.length > 0 ? "More" : ""
+                trailing: "chevron_right"
+                onClicked: sm.view = "recent"
+            }
+            Grid {
+                id: recGrid
+                anchors.top: recHeader.bottom
+                anchors.topMargin: 8
+                width: parent.width
+                columns: 2
+                columnSpacing: 8
+                rowSpacing: 2
+                Repeater {
+                    // three rows, two while the now-playing strip is showing
+                    model: sm.app.recent.slice(0, sm.playing ? 4 : 6)
+                    FileRow { width: (recGrid.width - 8) / 2 }
+                }
+            }
+            Label {
+                visible: sm.app.recent.length === 0
+                anchors.top: recHeader.bottom
+                anchors.topMargin: 14
+                x: 8
+                text: "Files you open will show up here."
+                color: sm.pal.text2
+            }
+
+            // ---- now playing (only while something plays; can be turned off) ----
+            Rectangle {
+                visible: sm.playing
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 56
+                radius: 8
+                color: sm.pal.tint
+                border.width: 1
+                border.color: sm.pal.stroke
+                readonly property var m: sm.app.media || {}
+                Rectangle {
+                    id: artBox
+                    x: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 36
+                    height: 36
+                    radius: 6
+                    color: sm.pal.tintHover
+                    clip: true
+                    Image {
+                        id: art
+                        anchors.fill: parent
+                        source: parent.parent.m.art || ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        visible: status === Image.Ready
+                    }
+                    Glyph {
+                        anchors.centerIn: parent
+                        visible: !art.visible
+                        name: "music_note"; fallback: "media-album-cover"
+                        size: 20; wght: 300
+                        color: sm.pal.text2
+                        fontAvailable: sm.pal.hasIconFont
+                    }
                 }
                 Column {
-                    visible: sm.view === "home" || sm.view === "recent"
-                    width: parent.width
+                    anchors.left: artBox.right
+                    anchors.leftMargin: 12
+                    anchors.right: controls.left
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+                    Label { width: parent.width; text: parent.parent.m.title || "" }
+                    Label {
+                        visible: text.length > 0
+                        width: parent.width
+                        text: parent.parent.m.artist || ""
+                        font.pixelSize: 12
+                        color: sm.pal.text2
+                    }
+                }
+                Row {
+                    id: controls
+                    anchors.right: parent.right
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+                    MediaButton { glyph: "skip_previous"; fallback: "media-skip-backward"; onClicked: sm.app.mediaCmd("Previous") }
+                    MediaButton {
+                        main: true
+                        glyph: parent.parent.m.playing ? "pause" : "play_arrow"
+                        fallback: parent.parent.m.playing ? "media-playback-pause" : "media-playback-start"
+                        onClicked: sm.app.mediaCmd("PlayPause")
+                    }
+                    MediaButton { glyph: "skip_next"; fallback: "media-skip-forward"; onClicked: sm.app.mediaCmd("Next") }
+                }
+            }
+        }
+
+        // ---- All apps ----
+        Item {
+            visible: !sm.searching && sm.view === "all"
+            anchors.fill: parent
+
+            SectionHeader {
+                id: allHeader
+                text: "All apps"
+                button: "Back"
+                leading: "chevron_left"
+                onClicked: sm.view = "home"
+            }
+            Flow {
+                id: chips
+                anchors.top: allHeader.bottom
+                anchors.topMargin: 10
+                x: 8
+                width: parent.width - 16
+                spacing: 6
+                Repeater {
+                    model: sm.categories
+                    Rectangle {
+                        id: chip
+                        required property var modelData
+                        readonly property bool current: sm.category === modelData.id
+                        width: chipText.implicitWidth + 24
+                        height: 28
+                        radius: 14
+                        color: current ? sm.pal.blue : chipArea.containsMouse ? sm.pal.tintHover : sm.pal.tint
+                        border.width: current ? 0 : 1
+                        border.color: sm.pal.stroke
+                        Label {
+                            id: chipText
+                            anchors.centerIn: parent
+                            text: chip.modelData.label
+                            font.pixelSize: 12
+                            strong: chip.current
+                            color: chip.current ? sm.pal.blueText : sm.pal.text1
+                        }
+                        MouseArea {
+                            id: chipArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: sm.category = chip.modelData.id
+                        }
+                    }
+                }
+            }
+            Flickable {
+                anchors.top: chips.bottom
+                anchors.topMargin: 10
+                anchors.bottom: parent.bottom
+                width: parent.width
+                contentHeight: allCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+                Column {
+                    id: allCol
+                    width: parent.width - 12
+                    Repeater {
+                        model: sm.view === "all" ? sm.allRows : []
+                        Loader {
+                            required property var modelData
+                            width: allCol.width
+                            sourceComponent: modelData.kind === "letter" ? letterRow : appRow
+                            Component {
+                                id: letterRow
+                                Label {
+                                    leftPadding: 12
+                                    height: 32
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: modelData.name
+                                    strong: true
+                                    color: sm.pal.blue
+                                }
+                            }
+                            Component {
+                                id: appRow
+                                ListRow { item: modelData }
+                            }
+                        }
+                    }
+                    Label {
+                        visible: sm.allRows.length === 0
+                        leftPadding: 12
+                        topPadding: 8
+                        text: "No apps here."
+                        color: sm.pal.text2
+                    }
+                }
+            }
+        }
+
+        // ---- every recent file ----
+        Item {
+            visible: !sm.searching && sm.view === "recent"
+            anchors.fill: parent
+            SectionHeader {
+                id: recentHeader
+                text: "Recommended"
+                button: "Back"
+                leading: "chevron_left"
+                onClicked: sm.view = "home"
+            }
+            Flickable {
+                anchors.top: recentHeader.bottom
+                anchors.topMargin: 8
+                anchors.bottom: parent.bottom
+                width: parent.width
+                contentHeight: recentCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+                Column {
+                    id: recentCol
+                    width: parent.width - 12
                     spacing: 2
                     Repeater {
-                        model: sm.view === "recent" ? sm.app.recent : sm.app.recent.slice(0, 3)
-                        RecentRow {}
-                    }
-                    Text {
-                        visible: sm.app.recent.length === 0
-                        leftPadding: 12
-                        text: "No recent files."
-                        font.family: sm.pal.font
-                        color: sm.pal.mut
+                        model: sm.view === "recent" ? sm.app.recent : []
+                        FileRow { width: recentCol.width }
                     }
                 }
             }
         }
     }
 
-    // ---- the side column ------------------------------------------------------
+    component MediaButton: Rectangle {
+        id: mb
+        property string glyph
+        property string fallback
+        property bool main: false
+        signal clicked()
+        width: 32
+        height: 32
+        radius: 16
+        color: main ? sm.pal.blue : mbArea.containsMouse ? sm.pal.tintHover : "transparent"
+        Glyph {
+            anchors.centerIn: parent
+            name: mb.glyph; fallback: mb.fallback
+            size: 20; wght: 300
+            filled: mb.main
+            color: mb.main ? sm.pal.blueText : sm.pal.text1
+            fontAvailable: sm.pal.hasIconFont
+        }
+        MouseArea {
+            id: mbArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: mb.clicked()
+        }
+    }
+
+    // ---- bottom bar: you, and the power button ------------------------------------
 
     Item {
-        id: side
-        anchors.right: parent.right
-        width: 276
-        height: parent.height
-        Rectangle { width: 1; height: parent.height; color: sm.pal.out }
-
-        Column {
-            x: 20
-            y: 22
-            width: parent.width - 40
-            spacing: 14
-
-            Item {
-                width: parent.width
-                height: 44
-                Rectangle {
-                    id: sideAvatar
-                    width: 44
-                    height: 44
-                    radius: 22
-                    color: sm.pal.accC
-                    clip: true
-                    Text {
-                        anchors.centerIn: parent
-                        visible: !face.visible
-                        text: (sm.app.stats.user || "?").charAt(0).toUpperCase()
-                        font.family: sm.pal.font
-                        font.pixelSize: Math.round(44 * 0.4)
-                        font.weight: Font.Medium
-                        color: sm.pal.accCFg
-                    }
-                    Image {
-                        id: face
-                        anchors.fill: parent
-                        visible: status === Image.Ready
-                        source: sm.app.stats.avatar ? "file://" + sm.app.stats.avatar : ""
-                        fillMode: Image.PreserveAspectCrop
-                    }
+        id: footer
+        anchors.bottom: parent.bottom
+        width: parent.width
+        height: 60
+        Rectangle { width: parent.width; height: 1; color: sm.pal.divider }
+        Row {
+            x: sm.pad + 4
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 12
+            Rectangle {
+                width: 32
+                height: 32
+                radius: 16
+                color: sm.pal.alpha(sm.pal.blue, 0.25)
+                clip: true
+                Label {
+                    anchors.centerIn: parent
+                    visible: !face.visible
+                    text: (sm.app.stats.user || "?").charAt(0).toUpperCase()
+                    font.pixelSize: 14
+                    strong: true
                 }
-                Column {
-                    anchors.left: sideAvatar.right
-                    anchors.leftMargin: 12
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    Text {
-                        width: parent.width
-                        elide: Text.ElideRight
-                        text: sm.app.stats.user || ""
-                        font.family: sm.pal.font
-                        font.pixelSize: 15
-                        font.weight: Font.Medium
-                        color: sm.pal.fg
-                    }
-                    Text {
-                        text: sm.app.uptimeText(sm.app.stats.uptime)
-                        font.family: "monospace"
-                        font.pixelSize: 12
-                        color: sm.pal.mut
-                    }
+                Image {
+                    id: face
+                    anchors.fill: parent
+                    visible: status === Image.Ready
+                    source: sm.app.stats.avatar ? "file://" + sm.app.stats.avatar : ""
+                    fillMode: Image.PreserveAspectCrop
                 }
             }
-
-            // now playing (can be hidden in Tidewater's settings)
-            Item {
-                visible: Settings.showNowPlaying
-                width: parent.width
-                height: player.implicitHeight + 28
-                readonly property var m: sm.app.media
-                readonly property bool present: !!(m && m.title)
-                Column {
-                    id: player
-                    x: 14
-                    y: 14
-                    width: parent.width - 28
-                    spacing: 10
-                    Row {
-                        width: parent.width
-                        spacing: 12
-                        Rectangle {
-                            width: 56
-                            height: 56
-                            radius: sm.r(12)
-                            color: sm.pal.accC
-                            clip: true
-                            Image {
-                                id: art
-                                anchors.fill: parent
-                                source: player.parent.m.art || ""
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                visible: status === Image.Ready
-                            }
-                            Glyph {
-                                anchors.centerIn: parent
-                                visible: !art.visible
-                                name: "music_note"
-                                fallback: "media-album-cover"
-                                size: 26
-                                color: sm.pal.accCFg
-                                fontAvailable: sm.pal.hasIconFont
-                            }
-                        }
-                        Column {
-                            width: parent.width - 68
-                            anchors.verticalCenter: parent.verticalCenter
-                            Text {
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: player.parent.present ? player.parent.m.title : "Nothing playing"
-                                textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                                font.family: sm.pal.font
-                                font.pixelSize: 14
-                                font.weight: Font.Medium
-                                color: player.parent.present ? sm.pal.fg : sm.pal.mut
-                            }
-                            Text {
-                                visible: text.length > 0
-                                width: parent.width
-                                elide: Text.ElideRight
-                                text: player.parent.present ? (player.parent.m.artist || "") : ""
-                                textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                                font.family: sm.pal.font
-                                font.pixelSize: 12
-                                color: sm.pal.mut
-                            }
-                        }
-                    }
-                    Row {
-                        visible: player.parent.present
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 12
-                        IconButton { pal: sm.pal; glyph: "skip_previous"; fallback: "media-skip-backward"; onClicked: sm.app.mediaCmd("Previous") }
-                        IconButton {
-                            pal: sm.pal
-                            size: 40
-                            glyph: player.parent.m.playing ? "pause_circle" : "play_circle"
-                            fallback: player.parent.m.playing ? "media-playback-pause" : "media-playback-start"
-                            color: sm.pal.acc
-                            onClicked: sm.app.mediaCmd("PlayPause")
-                        }
-                        IconButton { pal: sm.pal; glyph: "skip_next"; fallback: "media-skip-forward"; onClicked: sm.app.mediaCmd("Next") }
-                    }
-                }
-            }
-
-            // system meters
-            Item {
-                width: parent.width
-                height: meters.implicitHeight + 32
-                Rectangle { width: parent.width; height: 1; color: sm.pal.out }
-                Column {
-                    id: meters
-                    x: 16
-                    y: 16
-                    width: parent.width - 32
-                    spacing: 13
-                    Repeater {
-                        model: {
-                            const s = sm.app.stats;
-                            const b = sm.app.bytes;
-                            return [
-                                { label: s.cpuTemp > 0 ? "CPU · " + s.cpuTemp + " °C" : "CPU",
-                                  value: Math.round((s.cpu || 0) * 100) + "%", fraction: s.cpu || 0, shown: true },
-                                { label: "Memory", value: b(s.memUsed) + " / " + b(s.memTotal),
-                                  fraction: s.memTotal > 0 ? s.memUsed / s.memTotal : 0, shown: true },
-                                { label: "Storage", value: b(s.diskFree) + " free",
-                                  fraction: s.diskSize > 0 ? 1 - s.diskFree / s.diskSize : 0, shown: s.diskSize > 0 },
-                                { label: s.gpuTemp > 0 ? "GPU · " + s.gpuTemp + " °C" : "GPU",
-                                  value: Math.round(Math.max(0, s.gpu || 0) * 100) + "%", fraction: Math.max(0, s.gpu || 0),
-                                  shown: s.gpu >= 0 }
-                            ].filter(m => m.shown);
-                        }
-                        Column {
-                            id: meter
-                            required property var modelData
-                            width: meters.width
-                            spacing: 6
-                            Item {
-                                width: parent.width
-                                height: 16
-                                Text { text: meter.modelData.label; font.family: sm.pal.font; font.pixelSize: 12; color: sm.pal.mut }
-                                Text { anchors.right: parent.right; text: meter.modelData.value; font.family: sm.pal.font; font.pixelSize: 12; color: sm.pal.mut }
-                            }
-                            Rectangle {
-                                width: parent.width
-                                height: 5
-                                radius: 2.5
-                                color: sm.pal.alpha(sm.pal.fg, 0.12)
-                                Rectangle {
-                                    width: parent.width * Math.max(0, Math.min(1, meter.modelData.fraction))
-                                    height: parent.height
-                                    radius: parent.radius
-                                    color: sm.pal.acc
-                                    Behavior on width { NumberAnimation { duration: 400 } }
-                                }
-                            }
-                        }
-                    }
-                }
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: sm.app.stats.fullName || sm.app.stats.user || ""
             }
         }
-
-        // Power: the same shut down / restart / log out screen as the panel's power button
-        // (can be hidden in Tidewater's settings)
+        // Power: the same shut down / restart / log out screen as the panel's
+        // power button (can be hidden in Tidewater's settings)
         Rectangle {
-            id: powerButton
             visible: Settings.showMenuPower
-            x: 20
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 22
-            width: side.width - 40
-            height: 44
-            radius: sm.r(14)
-            color: powerArea.containsMouse ? sm.pal.s3 : sm.pal.s1
+            anchors.right: parent.right
+            anchors.rightMargin: sm.pad - 4
+            anchors.verticalCenter: parent.verticalCenter
+            width: 40
+            height: 40
+            radius: 8
+            color: powerArea.containsMouse ? sm.pal.tintHover : "transparent"
             Glyph {
                 anchors.centerIn: parent
-                name: "power_settings_new"
-                fallback: "system-shutdown"
-                size: 20
-                color: sm.pal.fg
+                name: "power_settings_new"; fallback: "system-shutdown"
+                size: 20; wght: 300
+                color: sm.pal.text1
                 fontAvailable: sm.pal.hasIconFont
             }
             MouseArea {

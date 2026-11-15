@@ -114,11 +114,12 @@ PlasmoidItem {
         py("stats");
         startSettings();
     }
+    // what's playing, kept current while the menu is open
     Timer {
         interval: 2000
-        running: root.expanded
+        running: root.expanded && Settings.showNowPlaying
         repeat: true
-        onTriggered: { root.py("stats"); if (Settings.showNowPlaying) root.py("media"); }
+        onTriggered: root.py("media")
     }
 
     // ---- actions --------------------------------------------------------------
@@ -233,17 +234,27 @@ PlasmoidItem {
     }
 
     // ---- formatting -------------------------------------------------------------
-    function bytes(n) {
-        if (!(n > 0)) return "0 B";
-        const u = ["B", "KiB", "MiB", "GiB", "TiB"];
-        let i = 0;
-        while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-        return (i >= 3 ? n.toFixed(n < 10 ? 1 : 0) : Math.round(n)) + " " + u[i];
+    // "Downloads · 2 h ago" for a recent file: the folder it is in (Home for
+    // your home folder) and when it was last used.
+    function fileWhere(f) {
+        const dir = String(f.dir || "");
+        const folder = dir === "~" ? "Home" : (dir.split("/").filter(p => p.length > 0).pop() || dir);
+        const when = ago(f.when);
+        return when ? folder + " · " + when : folder;
     }
-    function uptimeText(sec) {
-        if (!sec) return "";
-        const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
-        return d > 0 ? "up " + d + " d " + h + " h" : "up " + h + " h " + (m < 10 ? "0" : "") + m + " min";
+    function ago(iso) {
+        const t = Date.parse(iso || "");
+        if (!(t > 0)) return "";
+        const min = Math.floor((Date.now() - t) / 60000);
+        if (min < 1) return "Just now";
+        if (min < 60) return min + " min ago";
+        const d = new Date(t), now = new Date();
+        const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                                 - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+        if (days === 0) return Math.floor(min / 60) + " h ago";
+        if (days === 1) return "Yesterday";
+        if (days < 7) return Qt.formatDate(d, "dddd");
+        return Qt.formatDate(d, now.getFullYear() === d.getFullYear() ? "MMM d" : "MMM d, yyyy");
     }
 
     // ---- Tidewater settings ----------------------------------------------------
@@ -378,10 +389,10 @@ PlasmoidItem {
         id: startMenu
         app: root
         pal: design
-        Layout.preferredWidth: 928
-        Layout.preferredHeight: 668
-        Layout.minimumWidth: 928
-        Layout.minimumHeight: 668
+        Layout.preferredWidth: 640
+        Layout.preferredHeight: 700
+        Layout.minimumWidth: 640
+        Layout.minimumHeight: 700
         Connections {
             target: root
             function onExpandedChanged() { if (root.expanded) startMenu.reset(); }

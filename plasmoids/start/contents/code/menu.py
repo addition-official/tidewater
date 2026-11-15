@@ -16,6 +16,7 @@
 import glob
 import json
 import locale
+import mimetypes
 import os
 import re
 import shutil
@@ -330,6 +331,26 @@ def pretty_dir(path):
     return "~" + d[len(HOME):] if d.startswith(HOME) else d
 
 
+# The usual folders in your home folder have icons of their own.
+HOME_FOLDER_ICONS = {"Desktop": "user-desktop", "Documents": "folder-documents",
+                     "Downloads": "folder-download", "Music": "folder-music",
+                     "Pictures": "folder-pictures", "Videos": "folder-videos",
+                     "Public": "folder-public", "Templates": "folder-templates"}
+
+
+def file_icon(path, folder):
+    """An icon theme name for a file or folder, from its type."""
+    path = path.rstrip("/")
+    if folder:
+        if path == HOME:
+            return "user-home"
+        if os.path.dirname(path) == HOME:
+            return HOME_FOLDER_ICONS.get(os.path.basename(path), "folder")
+        return "folder"
+    kind = mimetypes.guess_type(path)[0]
+    return kind.replace("/", "-") if kind else "text-x-generic"
+
+
 # Filesystems that may live on another machine: a stat() there can hang for
 # a long time when the server or the network is gone.
 REMOTE_FS = ("nfs", "nfs4", "cifs", "smb3", "smbfs", "sshfs", "fuse", "9p", "afs", "ceph",
@@ -382,6 +403,7 @@ def recent(limit=20):
             "dir": pretty_dir(path),
             "url": href,
             "folder": folder,
+            "icon": file_icon(path, folder),
             "when": b.get("modified") or b.get("visited") or b.get("added") or "",
         })
     items.sort(key=lambda i: i["when"], reverse=True)
@@ -395,8 +417,10 @@ def files(query, limit=6):
     for path in run(["baloosearch6", "-l", str(limit), "--", query]).splitlines():
         path = path.strip()
         if path and os.path.exists(path):
+            folder = os.path.isdir(path)
             res.append({"name": os.path.basename(path), "dir": pretty_dir(path),
-                        "url": "file://" + urllib.parse.quote(path), "folder": os.path.isdir(path)})
+                        "url": "file://" + urllib.parse.quote(path), "folder": folder,
+                        "icon": file_icon(path, folder)})
     return res
 
 

@@ -15,6 +15,9 @@ Item {
     property real size: 20
     property color color: "black"
     property bool filled: false
+    // stroke weight of the font's outline (400 is Material's default; the
+    // redesigned popups use 300, closer to Windows 11's thin icons)
+    property int wght: 400
     property bool fontAvailable: true
     // Name of one of the drawings below. When set, it is shown instead of the
     // font glyph (and instead of the fallback).
@@ -67,7 +70,7 @@ Item {
         color: g.color
         font.family: "Material Symbols Rounded"
         font.pixelSize: g.size
-        font.variableAxes: ({ "FILL": g.filled ? 1 : 0, "opsz": Math.max(20, Math.min(48, g.size)) })
+        font.variableAxes: ({ "FILL": g.filled ? 1 : 0, "wght": g.wght, "opsz": Math.max(20, Math.min(48, g.size)) })
         renderType: Text.QtRendering
     }
     Kirigami.Icon {
