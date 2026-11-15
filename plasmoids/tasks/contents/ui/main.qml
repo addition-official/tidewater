@@ -176,6 +176,32 @@ PlasmoidItem {
         if (changed)
             badges = next;
     }
+    // The keys an app's row can be found under: its app id as it is (an id can
+    // itself end in ".desktop", like org.telegram.desktop), the same without
+    // that ending, and the name of its launcher.
+    function rowKeys(appId, launcherUrl) {
+        return [String(appId || "").toLowerCase(), appKey(appId), appKey(launcherUrl)];
+    }
+    // Apps that quit: forget what they last reported, so an old count doesn't
+    // come back when they start again. Run when rows go away.
+    function pruneBadges() {
+        const known = Object.keys(badges);
+        if (known.length === 0)
+            return;
+        const R = TaskManager.AbstractTasksModel;
+        const live = {};
+        for (let i = 0; i < tasks.count; ++i) {
+            const idx = tasks.makeModelIndex(i);
+            if (tasks.data(idx, R.IsLauncher) === true)
+                continue;
+            for (const k of rowKeys(tasks.data(idx, R.AppId), tasks.data(idx, R.LauncherUrlWithoutIcon)))
+                if (k)
+                    live[k] = true;
+        }
+        const gone = known.filter(k => !live[k]);
+        if (gone.length > 0)
+            clearBadge(gone);
+    }
     // An app that quit: forget what it last reported.
     function clearBadge(keys) {
         if (!keys.some(k => k && badges[k]))
@@ -330,6 +356,7 @@ PlasmoidItem {
             root.modelRev++;
             if (preview.visible)
                 Qt.callLater(root.fillPreview);
+            Qt.callLater(root.pruneBadges);
         }
         function onRowsInserted() {
             root.modelRev++;
@@ -412,15 +439,25 @@ PlasmoidItem {
         const g = Plasmoid.containment.screenGeometry;
         if (!t || g.width <= 0 || g.height <= 0)
             return;
-        const w = preview.width;
-        const h = preview.height;
+        // The size the card is about to have: the popup window's own size
+        // is out of date while it is hidden (Plasma only resizes it when shown).
+        const m = preview.margins;
+        const w = card.width + (m ? m.left + m.right : 0);
+        const h = card.height + (m ? m.top + m.bottom : 0);
         const icon = t.mapToGlobal(0, 0);
+        // The free area leaves out the panel, but not one that auto-hides:
+        // then the icon itself is the limit, so the card never covers the bar.
         const free = Plasmoid.containment.availableScreenRect;
-        // just above the panel; the icon's own top if the free area is unknown
-        const bottom = free.height > 0 ? g.y + free.y + free.height : icon.y;
         const gap = 4;
         let x = Math.round(icon.x + (t.width - w) / 2);
-        let y = Math.round(bottom - h - gap);
+        let y;
+        if (Plasmoid.location === PlasmaCore.Types.TopEdge) {
+            const below = icon.y + t.height;
+            y = Math.round((free.height > 0 ? Math.max(g.y + free.y, below) : below) + gap);
+        } else {
+            const above = free.height > 0 ? Math.min(g.y + free.y + free.height, icon.y) : icon.y;
+            y = Math.round(above - h - gap);
+        }
         x = Math.max(g.x + gap, Math.min(g.x + g.width - w - gap, x));
         y = Math.max(g.y + gap, Math.min(g.y + g.height - h - gap, y));
         preview.x = x;
@@ -713,8 +750,15 @@ PlasmoidItem {
                     readonly property string key: root.keyFor(model.LauncherUrlWithoutIcon, model.WinIdList)
                     // Unread count and progress the app reports (see root.badges),
                     // only while it runs, like Windows.
-                    readonly property var badgeKeys: [root.appKey(model.AppId), root.appKey(model.LauncherUrlWithoutIcon)]
-                    readonly property var badge: isLauncher ? null : (root.badges[badgeKeys[0]] || root.badges[badgeKeys[1]] || null)
+                    readonly property var badgeKeys: root.rowKeys(model.AppId, model.LauncherUrlWithoutIcon)
+                    readonly property var badge: {
+                        if (isLauncher)
+                            return null;
+                        for (const k of badgeKeys)
+                            if (k && root.badges[k])
+                                return root.badges[k];
+                        return null;
+                    }
                     readonly property int badgeCount: badge && badge.countVisible ? badge.count : 0
                     readonly property bool showProgress: !!badge && badge.progressVisible
                     onIsLauncherChanged: if (isLauncher)
@@ -984,7 +1028,17 @@ PlasmoidItem {
                 if (from < 0)
                     return;
                 const slot = root.iconSize + 2 * root.pad + root.spacing;
-                const target = Math.max(0, Math.min(tasks.count - 1, Math.floor(mouse.x / slot)));
+                let target = Math.max(0, Math.min(tasks.count - 1, Math.floor(mouse.x / slot)));
+                // Pinned apps stay among the pinned ones and other apps after
+                // them (the model refuses anything else): stop at the edge, so
+                // a quick drag past it still gets as far as it can.
+                const R = TaskManager.AbstractTasksModel;
+                const pinnedAt = i => tasks.launcherPosition(tasks.data(tasks.makeModelIndex(i), R.LauncherUrlWithoutIcon)) >= 0;
+                let pinned = 0;
+                for (let i = 0; i < tasks.count; ++i)
+                    if (pinnedAt(i))
+                        ++pinned;
+                target = pinnedAt(from) ? Math.min(target, Math.max(0, pinned - 1)) : Math.max(target, Math.min(pinned, tasks.count - 1));
                 if (target !== from)
                     tasks.move(from, target);
             }
