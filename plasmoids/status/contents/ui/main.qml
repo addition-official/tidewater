@@ -256,7 +256,7 @@ PlasmoidItem {
     // ---- The card -------------------------------------------------------------
     // In the manner of Windows 11: buttons three across (switch on the left,
     // arrow to the settings page on the right), brightness and volume, and a
-    // bottom bar with the connection, System Settings and the power button.
+    // bottom bar with System Settings and the power button.
     fullRepresentation: Item {
         id: cardRoot
         Layout.preferredWidth: 360
@@ -482,7 +482,7 @@ PlasmoidItem {
                 }
             }
 
-            // Bottom bar: the connection, System Settings, power
+            // Bottom bar: System Settings and power, on the right
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.divider }
             RowLayout {
                 Layout.fillWidth: true
@@ -490,23 +490,7 @@ PlasmoidItem {
                 Layout.rightMargin: 12
                 Layout.preferredHeight: 56
                 spacing: 8
-                Glyph {
-                    name: root.st.ethOn ? "lan" : root.st.wifiOn && root.st.ssid ? "wifi" : "signal_disconnected"
-                    svg: root.st.ethOn ? "ethernet" : ""
-                    fallback: "network-wired-symbolic"
-                    size: 16; wght: 300
-                    color: design.text2
-                    fontAvailable: design.hasIconFont
-                }
-                Text {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: root.st.ethOn ? "Ethernet" : root.st.wifiOn && root.st.ssid ? root.st.ssid : "Not connected"
-                    textFormat: Text.PlainText   // network names come from outside: never render as HTML
-                    font.family: design.font
-                    font.pixelSize: 12
-                    color: design.text2
-                }
+                Item { Layout.fillWidth: true }
                 BarIcon {
                     glyph: "settings"; fallback: "configure"; tip: "System Settings"
                     onClicked: { root.sh("open systemsettings"); root.expanded = false; }
