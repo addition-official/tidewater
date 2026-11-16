@@ -18,6 +18,7 @@ import json
 import locale
 import mimetypes
 import os
+import shlex
 import re
 import shutil
 import stat
@@ -252,9 +253,33 @@ def apps():
                 "keywords": localized(e, "Keywords"),
                 "actions": app_actions(e),
                 "path": path,
+                # how a running app names itself (sound streams, windows):
+                # its program and its window class
+                "bin": exec_binary(e.get("Exec", "")),
+                "wmclass": e.get("StartupWMClass", ""),
             })
     result.sort(key=lambda a: a["name"].lower())
     return result
+
+
+def exec_binary(line):
+    """The program an Exec= line runs, by its file name ("zoom" for
+    "/usr/bin/zoom %U"); for "env A=b prog" the prog; for "flatpak run ...
+    org.app.Id" the app id."""
+    try:
+        parts = shlex.split(line)
+    except ValueError:
+        parts = line.split()
+    parts = [p for p in parts if not p.startswith("%")]
+    if parts and os.path.basename(parts[0]) == "env":
+        parts = [p for p in parts[1:] if "=" not in p and not p.startswith("-")]
+    if not parts:
+        return ""
+    prog = os.path.basename(parts[0])
+    if prog == "flatpak":
+        ids = [p for p in parts[1:] if not p.startswith("-") and p != "run" and "." in p]
+        return ids[0] if ids else prog
+    return prog
 
 
 def settings_pages():

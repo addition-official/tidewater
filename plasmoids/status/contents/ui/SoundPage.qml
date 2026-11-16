@@ -16,6 +16,8 @@ import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.private.volume
 import "common"
+// ~/.local/share/tidewater/qml: the installed apps (the start menu's list)
+import "../../../../../tidewater/qml"
 
 Item {
     id: page
@@ -60,10 +62,44 @@ Item {
         const portName = port ? String(port.name || "") + String(port.description || "") : "";
         return ff === "headphone" || ff === "headset" || /headphone|headset/i.test(portName) ? "headphones" : "speaker";
     }
+    // The installed app a sound stream belongs to, from the start menu's
+    // list, so it shows with its real icon and name. Plasma's own guess at
+    // the icon tries the program's name as an icon name, which can be a
+    // different icon altogether (Zoom's program "zoom" is the theme's
+    // magnifying glass).
+    readonly property var installedApps: {
+        const o = Settings.searchOwner(-1);
+        return o && o.apps ? o.apps : [];
+    }
+    function lastPart(id) { const p = String(id).split("."); return p[p.length - 1]; }
+    function appFor(m) {
+        const props = m.Properties || {};
+        const c = m.Client;
+        const keys = [props["pipewire.access.portal.app_id"], props["application.id"],
+                      props["application.process.binary"], props["application.name"],
+                      c && c.name, m.Name]
+            .filter(k => !!k).map(k => String(k).toLowerCase());
+        for (const k of keys)
+            for (const a of installedApps) {
+                const id = String(a.id || "").replace(/\.desktop$/, "").toLowerCase();
+                const bin = String(a.bin || "").toLowerCase();
+                const names = [id, lastPart(id), bin, lastPart(bin),
+                               String(a.wmclass || "").toLowerCase(), String(a.name || "").toLowerCase()];
+                if (names.indexOf(k) >= 0 || names.indexOf(lastPart(k)) >= 0)
+                    return a;
+            }
+        return null;
+    }
     function appName(m) {
+        const a = appFor(m);
+        if (a) return a.name;
         const c = m.Client;
         if (c && c.name && c.name !== "pipewire-media-session") return c.name;
         return m.Name || "App";
+    }
+    function appIcon(m) {
+        const a = appFor(m);
+        return (a && a.icon) || m.IconName || "audio-volume-high";
     }
 
     component Heading: Text {
@@ -205,7 +241,7 @@ Item {
                 MixerRow {
                     required property var model
                     entry: model
-                    icon: model.IconName || "audio-volume-high"
+                    icon: page.appIcon(model)
                     label: page.appName(model)
                 }
             }
