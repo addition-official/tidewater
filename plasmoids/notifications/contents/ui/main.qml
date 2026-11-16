@@ -400,6 +400,7 @@ PlasmoidItem {
     }
 
     fullRepresentation: Item {
+        FloatingPopup {}
         Layout.preferredWidth: 424
         Layout.minimumWidth: 424
         Layout.maximumWidth: 424

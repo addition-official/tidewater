@@ -150,6 +150,7 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         id: cal
+        FloatingPopup {}
         Layout.preferredWidth: 320
         Layout.minimumWidth: 320
         Layout.preferredHeight: col.implicitHeight + 32

@@ -259,6 +259,7 @@ PlasmoidItem {
     // bottom bar with System Settings and the power button.
     fullRepresentation: Item {
         id: cardRoot
+        FloatingPopup {}
         Layout.preferredWidth: 360
         Layout.minimumWidth: 360
         Layout.maximumWidth: 360

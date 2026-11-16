@@ -23,6 +23,9 @@ Item {
     implicitWidth: 640
     implicitHeight: 700
 
+    // float a little away from the panel and the screen edges, like Windows 11
+    FloatingPopup {}
+
     property string view: "home"   // home | all | recent
     property string category: "all"
     property string query: ""
