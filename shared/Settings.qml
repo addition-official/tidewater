@@ -213,4 +213,24 @@ QtObject {
         if (pick)
             pick.openSettingsPage();
     }
+
+    // ---- search ----------------------------------------------------------------
+    // The taskbar's search box or button opens the start menu ready to type in,
+    // like Windows: the start button on the same monitor if there is one, else
+    // any start button on screen. False when there is no start button.
+    function openStartSearch(screen) {
+        let pick = null;
+        for (const o of owners) {
+            if (o.screenIndex === screen && o.onScreen && o.onScreen()) {
+                pick = o;
+                break;
+            }
+            if (!pick || (o.onScreen && o.onScreen()))
+                pick = o;
+        }
+        if (!pick)
+            return false;
+        pick.openSearch();
+        return true;
+    }
 }

@@ -352,6 +352,11 @@ PlasmoidItem {
         Settings.offer(v, when);
     }
 
+    // The taskbar's search box comes here (see Settings.openStartSearch): open
+    // the menu, which puts the cursor in its search field (StartMenu.reset).
+    readonly property int screenIndex: Plasmoid.containment ? Plasmoid.containment.screen : -1
+    function openSearch() { root.expanded = true; }
+
     // Other widgets' "Tidewater settings..." comes here (see Settings.openSettings).
     function openSettingsPage() { Plasmoid.internalAction("configure").trigger(); }
 

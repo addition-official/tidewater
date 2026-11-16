@@ -43,14 +43,21 @@ PlasmoidItem {
         Layout.preferredWidth: shown ? w : 0
         Layout.maximumWidth: shown ? w : 0
         Layout.fillHeight: true
-        function open() { exec.run("busctl --user call org.kde.krunner /App org.kde.krunner.App display"); }
+        // Open the start menu ready to type in, like the search on Windows;
+        // KRunner if there is no Tidewater start button.
+        function open() {
+            if (!Settings.openStartSearch(Plasmoid.containment ? Plasmoid.containment.screen : -1))
+                exec.run("busctl --user call org.kde.krunner /App org.kde.krunner.App display");
+        }
 
         BarButton {
             id: item
             visible: parent.shown && !parent.bar
             anchors.centerIn: parent
             pal: design
-            filled: true
+            // a pill with "Search", like Windows; just the icon has no frame
+            // until hovered
+            filled: Settings.searchStyle === "full"
             glyph: "search"
             svg: "search"     // the user's own magnifier (common/Glyph.qml)
             fallback: "search"
