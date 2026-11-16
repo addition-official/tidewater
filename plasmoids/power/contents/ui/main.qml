@@ -67,32 +67,24 @@ PlasmoidItem {
                 }
             }
 
-            // Show desktop corner, like Windows: a thin strip at the far right.
+            // Show desktop corner, like Windows: a sliver of empty space at the
+            // far right; a thin line shows while you hover it.
             // Click: show the desktop; click again: the windows come back
             // (KWin's own "Show Desktop" toggle).
             Item {
                 visible: box.corner
-                width: visible ? Math.max(8, Math.round(12 * design.unit)) : 0
+                width: visible ? Math.max(6, Math.round(10 * design.unit)) : 0
                 height: parent.height
-                // a short line marks where it starts
                 Rectangle {
-                    anchors.left: parent.left
+                    anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     width: 1
-                    height: Math.round(parent.height * 0.4)
-                    color: design.out
-                }
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.leftMargin: 2
-                    anchors.topMargin: 4
-                    anchors.bottomMargin: 4
-                    radius: 3
-                    color: design.s2
+                    height: Math.round(parent.height * 0.42)
+                    color: design.text2
                     opacity: cornerArea.containsMouse ? 1 : 0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 120
+                            duration: 100
                         }
                     }
                 }

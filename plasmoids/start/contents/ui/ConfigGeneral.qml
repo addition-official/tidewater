@@ -342,8 +342,8 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: "A thin strip after the power button: click it to show the "
-                + "desktop, click again to bring your windows back."
+            text: "A sliver of space at the far right of the taskbar, like Windows: "
+                + "click it to show the desktop, click again to bring your windows back."
         }
 
         // ==== Start menu
