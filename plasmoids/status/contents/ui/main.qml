@@ -264,7 +264,10 @@ PlasmoidItem {
         Layout.preferredWidth: 360
         Layout.minimumWidth: 360
         Layout.maximumWidth: 360
-        Layout.preferredHeight: card.implicitHeight
+        // the "Sound output" page (SoundPage.qml) takes the card's place
+        property bool soundOpen: false
+        readonly property bool showingSound: soundOpen && soundPage.status === Loader.Ready
+        Layout.preferredHeight: showingSound ? soundPage.item.implicitHeight : card.implicitHeight
         Layout.minimumHeight: Layout.preferredHeight
         // Exactly as tall as the content: without a maximum, Plasma can make
         // the popup taller (or keep an old, larger size) and leave empty space.
@@ -278,6 +281,8 @@ PlasmoidItem {
         Component.onCompleted: syncSliders()
         Connections {
             target: root
+            // closed: the next open starts on the card
+            function onExpandedChanged() { if (!root.expanded) cardRoot.soundOpen = false; }
             function onStChanged() { cardRoot.syncSliders(); }
             function onVolNowChanged() { if (root.volNow >= 0) vol.set(root.volNow); }
         }
@@ -312,8 +317,30 @@ PlasmoidItem {
             QQC2.ToolTip.delay: 500
         }
 
+        Loader {
+            id: soundPage
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            active: cardRoot.soundOpen
+            visible: cardRoot.showingSound
+            // the palette goes in as the page is made (it is required there)
+            onActiveChanged: if (active) setSource("SoundPage.qml", { pal: design })
+            // without Plasma's volume module there is no page: System Settings instead
+            onStatusChanged: if (status === Loader.Error) {
+                cardRoot.soundOpen = false;
+                root.openPage("kcm_pulseaudio");
+            }
+        }
+        Connections {
+            target: soundPage.item
+            function onBack() { cardRoot.soundOpen = false; }
+            function onMore() { root.openPage("kcm_pulseaudio"); }
+        }
+
         ColumnLayout {
             id: card
+            visible: !cardRoot.showingSound
             // Pinned to the top, not filling: if the popup ends up taller than
             // the content, the extra goes below instead of opening gaps.
             anchors.left: parent.left
@@ -479,8 +506,8 @@ PlasmoidItem {
                         onMoved: v => root.setVolume(v)
                     }
                     BarIcon {
-                        glyph: "speaker_group"; fallback: "audio-card"; tip: "Sound output and settings"
-                        onClicked: root.openPage("kcm_pulseaudio")
+                        glyph: "speaker_group"; fallback: "audio-card"; tip: "Sound output"
+                        onClicked: cardRoot.soundOpen = true
                     }
                 }
             }
