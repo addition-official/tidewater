@@ -32,6 +32,7 @@ QtObject {
     property bool showDividers: true
     property bool showPower: true
     property bool showDesktopCorner: false   // thin "show desktop" strip at the far right
+    property bool showBell: false            // separate notification bell (they are in the clock)
     // start menu
     property bool showNowPlaying: true
     property bool showMenuPower: true
@@ -61,6 +62,7 @@ QtObject {
             showDividers: true,
             showPower: true,
             showDesktopCorner: false,
+            showBell: false,
             showNowPlaying: true,
             showMenuPower: true,
             alignment: "center",

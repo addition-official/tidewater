@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// When the notifications were last read, shared by every Tidewater bell in
-// this Plasma session: reading them on one monitor clears the badge on all.
+// When the notifications were last read, shared by every Tidewater widget that
+// shows them (the clock, and the bell if it is on) in this Plasma session:
+// reading them in one place, or on one monitor, clears the badge everywhere.
 pragma Singleton
 import QtQuick
 

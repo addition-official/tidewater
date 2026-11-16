@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// Clock: time over date ("20:35 / Tue 15 Sep"),
-// a soft pill on hover, and a month calendar when clicked.
+// Clock: time over date ("20:35 / Tue 15 Sep"), a soft pill on hover, and,
+// like Windows 11, the unread notification count beside it. Clicked, it opens
+// the notifications above a month calendar.
 // Its options (seconds, 12/24-hour, the date line) are Tidewater's settings.
 import QtQuick
 import QtQuick.Layouts
@@ -31,6 +32,23 @@ PlasmoidItem {
     Palette {
         id: design
     }
+
+    // ---- notifications (shown above the calendar) ----------------------------
+    // Read state is shared with every other clock (and the bell, if it is on)
+    // through ReadMark, and saved here so it survives a restart.
+    NotificationData {
+        id: notifs
+        lastRead: ReadMark.lastRead
+    }
+    Connections {
+        target: ReadMark
+        function onLastReadChanged() {
+            if (Plasmoid.configuration.lastRead !== ReadMark.lastRead)
+                Plasmoid.configuration.lastRead = ReadMark.lastRead;
+        }
+    }
+    // closing the popup marks everything shown in it as read
+    onExpandedChanged: if (!root.expanded) ReadMark.offer(notifs.markRead())
 
     property date now: new Date()
     // Tick right after each second (or, with seconds hidden, at least every 5 s
@@ -84,12 +102,15 @@ PlasmoidItem {
 
     // These options used to be saved in this clock's own settings. Hand them
     // to the start widget, which moves them into Tidewater's settings once.
-    Component.onCompleted: Settings.offerLegacy("clock", {
-        showSeconds: Plasmoid.configuration.showSeconds,
-        showDate: Plasmoid.configuration.showDate,
-        hourMode: Plasmoid.configuration.hourMode,
-        dateFormat: Plasmoid.configuration.dateFormat
-    })
+    Component.onCompleted: {
+        Settings.offerLegacy("clock", {
+            showSeconds: Plasmoid.configuration.showSeconds,
+            showDate: Plasmoid.configuration.showDate,
+            hourMode: Plasmoid.configuration.hourMode,
+            dateFormat: Plasmoid.configuration.dateFormat
+        });
+        ReadMark.offer(Plasmoid.configuration.lastRead);
+    }
     readonly property real k: Math.max(0.7, design.unit)
 
     compactRepresentation: Item {
@@ -102,6 +123,7 @@ PlasmoidItem {
             id: face
             anchors.centerIn: parent
             width: Math.max(time.implicitWidth, date.visible ? date.implicitWidth : 0) + Math.round(24 * root.k)
+                   + (badge.visible ? badge.width + Math.round(8 * root.k) : 0)
             height: design.thickness - 8
             radius: Math.round(13 * root.k)
             color: area.containsMouse || root.expanded ? design.s2 : "transparent"
@@ -112,7 +134,9 @@ PlasmoidItem {
             }
 
             Column {
-                anchors.centerIn: parent
+                id: clockText
+                anchors.verticalCenter: parent.verticalCenter
+                x: Math.round(12 * root.k)
                 spacing: 0
                 Text {
                     id: time
@@ -137,13 +161,49 @@ PlasmoidItem {
                 }
             }
 
+            // Unread notifications, beside the time like Windows 11 (a crossed
+            // out bell while Do not disturb is on).
+            Rectangle {
+                id: badge
+                visible: notifs.quiet || notifs.unseen > 0
+                anchors.left: clockText.right
+                anchors.leftMargin: Math.round(8 * root.k)
+                anchors.verticalCenter: parent.verticalCenter
+                height: 18
+                width: notifs.quiet ? 18 : Math.max(18, badgeText.implicitWidth + 10)
+                radius: 9
+                color: notifs.quiet ? "transparent" : "#e0393e"    // red, like the taskbar's badges
+                Text {
+                    id: badgeText
+                    visible: !notifs.quiet
+                    anchors.centerIn: parent
+                    text: notifs.unseen > 99 ? "99+" : String(notifs.unseen)
+                    font.family: design.font
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: "white"
+                }
+                Glyph {
+                    visible: notifs.quiet
+                    anchors.centerIn: parent
+                    name: "notifications_off"; fallback: "notifications-disabled"
+                    size: 16
+                    color: design.fg
+                    fontAvailable: design.hasIconFont
+                }
+            }
+
             MouseArea {
                 id: area
-                acceptedButtons: Qt.LeftButton
+                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.expanded = !root.expanded
+                // middle-click: Do not disturb on or off
+                onClicked: mouse => {
+                    if (mouse.button === Qt.MiddleButton) notifs.toggleDnd();
+                    else root.expanded = !root.expanded;
+                }
             }
         }
     }
@@ -151,10 +211,10 @@ PlasmoidItem {
     fullRepresentation: Item {
         id: cal
         FloatingPopup {}
-        Layout.preferredWidth: 340
-        Layout.minimumWidth: 340
-        Layout.maximumWidth: 340
-        Layout.preferredHeight: col.implicitHeight + 20
+        Layout.preferredWidth: 360
+        Layout.minimumWidth: 360
+        Layout.maximumWidth: 360
+        Layout.preferredHeight: notesPanel.implicitHeight + 1 + col.implicitHeight + 20
         Layout.minimumHeight: Layout.preferredHeight
         Layout.maximumHeight: Layout.preferredHeight
 
@@ -291,11 +351,26 @@ PlasmoidItem {
             QQC2.ToolTip.delay: 500
         }
 
+        // the notifications, above the calendar
+        NotificationPanel {
+            id: notesPanel
+            notes: notifs
+            pal: design
+            width: parent.width
+        }
+        Rectangle {
+            id: notesDivider
+            anchors.top: notesPanel.bottom
+            width: parent.width
+            height: 1
+            color: design.divider
+        }
+
         ColumnLayout {
             id: col
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.top: parent.top
+            anchors.top: notesDivider.bottom
             spacing: 0
 
             // Today, like "Sunday, November 15" (day and month in the order of

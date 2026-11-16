@@ -31,6 +31,7 @@ KCM.SimpleKCM {
     property bool cfg_showDividers
     property bool cfg_showPower
     property bool cfg_showDesktopCorner
+    property bool cfg_showBell
     property bool cfg_showNowPlaying
     property bool cfg_showMenuPower
     property string cfg_alignment
@@ -54,6 +55,7 @@ KCM.SimpleKCM {
     property bool cfg_showDividersDefault
     property bool cfg_showPowerDefault
     property bool cfg_showDesktopCornerDefault
+    property bool cfg_showBellDefault
     property bool cfg_showNowPlayingDefault
     property bool cfg_showMenuPowerDefault
     property string cfg_alignmentDefault
@@ -301,6 +303,22 @@ KCM.SimpleKCM {
                 cfg_showPower = checked;
                 page.touch();
             }
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Notifications:"
+            text: "Show a separate notification bell"
+            checked: cfg_showBell
+            onToggled: {
+                cfg_showBell = checked;
+                page.touch();
+            }
+        }
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+            text: "Your notifications are in the clock: click it to see them above "
+                + "the calendar, like Windows. The bell shows them on a button of their own."
         }
         QQC2.CheckBox {
             Kirigami.FormData.label: "Show desktop:"

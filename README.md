@@ -80,7 +80,7 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
 ## What's in it
 
 - **Panel:** start button, Search, overview, workspace pills, taskbar,
-  tray, network/Bluetooth/volume, clock, notification bell, power
+  tray, network/Bluetooth/volume, clock (with notifications), power
 - **Taskbar:** live window previews on hover (in a rounded card), drag icons
   to reorder them, pinned apps, left or centered icons. Clicking an app with
   several windows opens its card at once, so you pick the window; the long
@@ -101,7 +101,9 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   bottom of the main monitor, optionally with the number. Tidewater's own
   slider and scrolling don't show it. Plasma's own volume popup is off while
   it is on
-- **Notification center:** grouped by app, Do not disturb, Clear all
+- **Notifications**, like Windows 11: click the clock to see them above the
+  calendar, with Do not disturb and Clear all; the unread count shows beside
+  the clock. A separate bell button can be turned on in the settings
 - **Alt+Tab** in the Windows 11 style: centered rows of window cards sized to
   each window; hover for X, Delete closes the selected one
 - **Settings:** one page for the whole panel, on every monitor. Right-click

@@ -14,5 +14,8 @@
     <!-- Qt date pattern for the line under the time: d/dd day, ddd/dddd weekday,
          M/MM/MMM/MMMM month, yy/yyyy year; anything in 'quotes' is literal. -->
     <entry name="dateFormat" type="String"><default>ddd d MMM</default></entry>
+    <!-- when the notifications were last read (ISO time), so the unread count
+         survives a restart; shared live through ReadMark -->
+    <entry name="lastRead" type="String"><default></default></entry>
   </group>
 </kcfg>
