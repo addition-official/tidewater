@@ -421,12 +421,14 @@ PlasmoidItem {
         app: root
         pal: design
         // A fixed size: Plasma remembers a popup's last size, and would
-        // otherwise keep showing it at an older, bigger one.
-        Layout.preferredWidth: 640
+        // otherwise keep showing it at an older, bigger one. Wider while
+        // searching, like Windows, where the search view is wider than Start.
+        readonly property int menuWidth: searching ? 820 : 640
+        Layout.preferredWidth: menuWidth
         Layout.preferredHeight: 700
-        Layout.minimumWidth: 640
+        Layout.minimumWidth: menuWidth
         Layout.minimumHeight: 700
-        Layout.maximumWidth: 640
+        Layout.maximumWidth: menuWidth
         Layout.maximumHeight: 700
         Connections {
             target: root

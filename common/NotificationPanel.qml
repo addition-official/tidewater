@@ -95,7 +95,7 @@ Column {
         contentHeight: cards.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+        QQC2.ScrollBar.vertical: ThinScrollBar { tint: panel.pal.text2 }
         Column {
             id: cards
             width: parent.width

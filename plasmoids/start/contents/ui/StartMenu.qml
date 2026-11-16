@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The start menu (640 x 700), in the manner of Windows 11:
+// The start menu (640 x 700; 820 wide while searching), in the manner of Windows 11:
 // search on top; pinned apps and recommended (recent) files; a slim
 // now-playing strip while something plays; your name and the power button
 // at the bottom. "All apps" lists every app A to Z, with filters for the
@@ -21,7 +21,7 @@ Item {
     required property var app      // main.qml's root: data and actions
     required property var pal
 
-    implicitWidth: 640
+    implicitWidth: searching ? 820 : 640   // wider while searching, like Windows
     implicitHeight: 700
 
     // float a little away from the panel and the screen edges, like Windows 11
@@ -683,7 +683,7 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 model: sm.allRows
                 reuseItems: true
-                QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+                QQC2.ScrollBar.vertical: ThinScrollBar { tint: sm.pal.text2 }
                 // back to the top when the filter changes
                 Connections {
                     target: sm
@@ -739,7 +739,7 @@ Item {
                 contentHeight: recentCol.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+                QQC2.ScrollBar.vertical: ThinScrollBar { tint: sm.pal.text2 }
                 Column {
                     id: recentCol
                     width: parent.width - 12

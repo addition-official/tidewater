@@ -328,12 +328,12 @@ Item {
         Flickable {
             x: 16
             y: 14
-            width: panel.listW + 4
+            width: panel.listW + 10   // room for the scroll bar beside the rows
             height: parent.height - 28
             contentHeight: resultsCol.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
+            QQC2.ScrollBar.vertical: ThinScrollBar { tint: panel.pal.text2 }
             Column {
                 id: resultsCol
                 width: panel.listW
