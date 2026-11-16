@@ -227,6 +227,26 @@ QtObject {
     }
     // The start widget whose search (apps, files, actions) and launcher the
     // taskbar's search box uses: the one on the same monitor if there is one.
+    // The taskbar's search boxes ("bar" style), so typing in the start menu
+    // moves to the box, like Windows: one search, not two.
+    property var bars: []
+    function addBar(b) {
+        if (bars.indexOf(b) < 0)
+            bars = bars.concat([b]);
+    }
+    function removeBar(b) {
+        bars = bars.filter(x => x !== b);
+    }
+    // The search box on `screen`, if the taskbar has one showing; else null.
+    function barOn(screen) {
+        if (searchStyle !== "bar")
+            return null;
+        for (const b of bars)
+            if (b.screenIndex === screen && b.shown)
+                return b;
+        return null;
+    }
+
     function searchOwner(screen) {
         let pick = null;
         for (const o of owners) {

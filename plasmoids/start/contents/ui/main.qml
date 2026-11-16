@@ -370,6 +370,36 @@ PlasmoidItem {
     // the menu, which puts the cursor in its search field (StartMenu.reset).
     readonly property int screenIndex: Plasmoid.containment ? Plasmoid.containment.screen : -1
     function openSearch() { root.expanded = true; }
+    // Typing in the start menu while the taskbar has a search box: the menu
+    // closes and the typing carries on in the box, like Windows (one search).
+    // False if there is no box on this screen.
+    function handToBar(text) {
+        const b = Settings.barOn(screenIndex);
+        if (!b) return false;
+        handTimer.bar = b;
+        handTimer.text = text;
+        close();
+        handTimer.restart();     // once the menu has let go of the keyboard
+        return true;
+    }
+    Timer {
+        id: handTimer
+        property var bar: null
+        property string text: ""
+        interval: 120
+        onTriggered: if (bar) bar.typeFromStart(text)
+    }
+    // The search, narrowed to one of the search panel's tabs
+    // (all, apps, documents, folders, settings).
+    function searchIn(query, tab) {
+        if (query.trim().length === 0) return [];
+        const keep = tab === "apps" ? (r => r.kind === "app")
+                   : tab === "documents" ? (r => r.kind === "file" && !r.folder)
+                   : tab === "folders" ? (r => r.kind === "file" && r.folder)
+                   : tab === "settings" ? (r => r.kind === "setting")
+                   : (r => true);
+        return search(query, fileResults).filter(keep);
+    }
 
     // Other widgets' "Tidewater settings..." comes here (see Settings.openSettings).
     function openSettingsPage() { Plasmoid.internalAction("configure").trigger(); }

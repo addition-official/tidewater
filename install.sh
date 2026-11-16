@@ -306,9 +306,18 @@ KEEP=$(python3 - "$RC" <<'PY' 2>/dev/null || echo '{}'
 import json, re, sys
 LISTS = {"launchers", "pinned"}            # StringList settings
 # Tidewater's settings: the start widget keeps them (see shared/Settings.qml)
-SETTINGS = ["startIcon", "searchStyle", "showOverview", "workspaces", "showDividers",
-            "showPower", "alignment", "iconSize", "expand", "showAllDesktops",
-            "showSeconds", "showDate", "hourMode", "dateFormat"]
+# (every option in the start widget's config, so newer ones are never missed)
+try:
+    SETTINGS = [n for n in re.findall(r'<entry name="([^"]+)"',
+                open("plasmoids/start/contents/config/main.xml").read())
+                if n not in ("pinned", "settingsRev")]
+except OSError:
+    SETTINGS = []
+SETTINGS = SETTINGS or ["startIcon", "searchStyle", "showOverview", "workspaces",
+            "showDividers", "showPower", "showDesktopCorner", "showBell",
+            "showNowPlaying", "showMenuPower", "alignment", "iconSize", "expand",
+            "showAllDesktops", "showSeconds", "showDate", "hourMode", "dateFormat",
+            "volumePopup", "volumeNumber"]
 # Where some of them were kept before (the old taskbar and clock settings)
 LEGACY = {"tidewater.tasks": ["alignment", "iconSize", "showAllDesktops"],
           "tidewater.clock": ["showSeconds", "hourMode", "showDate", "dateFormat"]}

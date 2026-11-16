@@ -41,7 +41,10 @@ PlasmoidItem {
         // item's visible itself when it shows the widget.
         readonly property bool shown: Settings.showPower
         readonly property bool corner: Settings.showDesktopCorner
-        readonly property int w: row.implicitWidth
+        // the corner's own sliver, kept whether the corner is on or off, so
+        // turning it on or off never moves anything
+        readonly property int gap: Math.max(6, Math.round(8 * design.unit))
+        readonly property int w: row.implicitWidth + gap
         Layout.minimumWidth: w
         Layout.preferredWidth: w
         Layout.maximumWidth: w
@@ -69,29 +72,29 @@ PlasmoidItem {
 
         }
 
-        // Show desktop corner, like Windows: the empty space at the far right
-        // end of the taskbar; a thin line shows while you hover it. It takes
-        // no room of its own: its area reaches from here to the screen
-        // edge, over the space that is there anyway.
+        // Show desktop corner, like Windows: a thin sliver at the far right
+        // end of the taskbar; a thin line shows while you hover it. The
+        // sliver is always there (empty while the corner is off); while on,
+        // its area also reaches over any space left up to the panel's edge.
         // Click: show the desktop; click again: the windows come back
         // (KWin's own "Show Desktop" toggle).
-        // (outside the Row: a Row does not place items with no width)
         Item {
             id: corner
             visible: box.corner
-            anchors.left: row.right
-            width: 0
+            x: row.implicitWidth
+            width: box.gap
             height: parent.height
-            property int reach: 8
+            property int reach: box.gap
             function measure() {
-                const g = Plasmoid.containment ? Plasmoid.containment.screenGeometry : null;
-                if (!g || g.width <= 0)
+                const win = corner.Window.window;
+                if (!win)
                     return;
-                const right = g.x + g.width - corner.mapToGlobal(0, 0).x;
-                corner.reach = Math.max(6, Math.min(48, Math.round(right)));
+                const right = win.width - corner.mapToItem(null, 0, 0).x;
+                corner.reach = Math.max(box.gap, Math.min(48, Math.round(right)));
             }
             Component.onCompleted: Qt.callLater(measure)
             onVisibleChanged: if (visible) Qt.callLater(measure)
+            onXChanged: Qt.callLater(measure)
             // the panel can still be settling into place: look again now and then
             Timer {
                 interval: 2000

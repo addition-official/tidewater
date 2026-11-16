@@ -4,8 +4,9 @@
 // search on top; pinned apps and recommended (recent) files; a slim
 // now-playing strip while something plays; your name and the power button
 // at the bottom. "All apps" lists every app A to Z, with filters for the
-// app categories; "More" lists every recent file. Typing searches apps,
-// files and actions (">" for actions only).
+// app categories; "More" lists every recent file. Typing shows the same
+// search panel as the taskbar's box (common/SearchPanel.qml); with a search
+// box on the taskbar, the typing moves there instead.
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
@@ -30,8 +31,14 @@ Item {
     property string category: "all"
     property string query: ""
     property int selected: 0
+    property string tab: "all"     // the search panel's filter
+    onTabChanged: selected = 0
     readonly property bool searching: query.trim().length > 0
-    readonly property var results: app.search(query, app.fileResults)
+    readonly property var results: app.searchIn(query, tab)
+    // for the search panel (common/SearchPanel.qml), the same one the
+    // taskbar's search box shows
+    readonly property var owner: app
+    function stopTyping() { reset(); }
     readonly property int pad: 28          // left and right edge of the content
     readonly property bool playing: Settings.showNowPlaying && !!(app.media && app.media.title)
 
@@ -39,6 +46,7 @@ Item {
         search.text = "";
         view = "home";
         category = "all";
+        tab = "all";
         selected = 0;
         search.forceActiveFocus();
     }
@@ -433,6 +441,11 @@ Item {
             leftPadding: 2
             placeholderText: ""
             onTextChanged: {
+                // a search box on the taskbar: the typing goes on there
+                if (text.trim().length > 0 && sm.app.handToBar(text)) {
+                    text = "";
+                    return;
+                }
                 sm.query = text;
                 sm.selected = 0;
                 sm.app.searchFiles(text);
@@ -465,53 +478,13 @@ Item {
         width: parent.width - 2 * (sm.pad - 8)
         height: footer.y - y - 12
 
-        // ---- search results, grouped ----
-        Flickable {
+        // ---- searching: the same panel as the taskbar's search box ----
+        SearchPanel {
             visible: sm.searching
             anchors.fill: parent
-            contentHeight: resultCol.implicitHeight
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            Column {
-                id: resultCol
-                width: parent.width
-                Repeater {
-                    model: sm.searching ? sm.results : []
-                    Column {
-                        id: resultEntry
-                        required property var modelData
-                        required property int index
-                        width: resultCol.width
-                        readonly property bool firstOfKind: index === 0 || sm.results[index - 1].kind !== modelData.kind
-                        Item { visible: resultEntry.firstOfKind && resultEntry.index > 0; width: 1; height: 8 }
-                        Label {
-                            visible: resultEntry.firstOfKind
-                            leftPadding: 4
-                            height: 30
-                            verticalAlignment: Text.AlignVCenter
-                            text: resultEntry.modelData.kind === "app" ? "Apps"
-                                : resultEntry.modelData.kind === "setting" ? "Settings"
-                                : resultEntry.modelData.kind === "file" ? "Files" : "Actions"
-                            font.pixelSize: 12
-                            strong: true
-                            color: sm.pal.text2
-                        }
-                        ListRow {
-                            item: resultEntry.modelData
-                            tall: resultEntry.modelData.kind !== "action"
-                            isSelected: resultEntry.index === sm.selected
-                            onHovered: sm.selected = resultEntry.index
-                        }
-                    }
-                }
-                Label {
-                    visible: sm.results.length === 0
-                    topPadding: 8
-                    leftPadding: 8
-                    text: "No matches"
-                    color: sm.pal.text2
-                }
-            }
+            anchors.topMargin: -14
+            box: sm
+            pal: sm.pal
         }
 
         // ---- home: pinned and recommended ----

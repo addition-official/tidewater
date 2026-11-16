@@ -82,16 +82,16 @@ PlasmoidItem {
         property bool typing: false      // between startTyping() and stopTyping()
         property string tab: "all"       // the panel's filter: all, apps, documents, folders, settings
         onTabChanged: selected = 0
-        readonly property var results: {
-            if (!owner || query.trim().length === 0) return [];
-            const all = owner.search(query, owner.fileResults);
-            const keep = tab === "apps" ? (r => r.kind === "app")
-                       : tab === "documents" ? (r => r.kind === "file" && !r.folder)
-                       : tab === "folders" ? (r => r.kind === "file" && r.folder)
-                       : tab === "settings" ? (r => r.kind === "setting")
-                       : (r => true);
-            return all.filter(keep);
+        readonly property var results: owner && query.trim().length > 0 ? owner.searchIn(query, tab) : []
+        // the start menu hands over what was typed there (Settings.typeInBar)
+        readonly property int screenIndex: Plasmoid.containment ? Plasmoid.containment.screen : -1
+        function typeFromStart(text) {
+            startTyping();
+            field.text = text;
+            field.cursorPosition = text.length;
         }
+        Component.onCompleted: Settings.addBar(this)
+        Component.onDestruction: Settings.removeBar(this)
         function startTyping() {
             typing = true;
             Plasmoid.status = PlasmaCore.Types.AcceptingInputStatus;

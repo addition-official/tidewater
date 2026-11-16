@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The search panel above the taskbar's search box, in the manner of Windows
-// 11: filter tabs on top (All, Apps, Documents, Folders, Settings). Before you
+// The search panel, in the manner of Windows 11: shown above the taskbar's
+// search box, and in the start menu while you type. Filter tabs on top (All,
+// Apps, Documents, Folders, Settings). Before you
 // type: Recent files on the left, Top apps (your pinned apps) on the right.
 // While you type: the Best match, then the rest grouped by kind on the left,
 // and on the right the details of the selected result with what you can do
@@ -10,7 +11,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
-import "common"
 
 Item {
     id: panel
@@ -18,6 +18,9 @@ Item {
     required property var pal
     width: 760
     height: 600
+    // the details pane (and Top apps) on the right; the list fills the rest
+    readonly property int detailW: Math.min(312, Math.round(width * 0.41))
+    readonly property int listW: width - detailW - 48
 
     readonly property var owner: box.owner
     readonly property bool searching: box.query.trim().length > 0
@@ -130,14 +133,14 @@ Item {
         Column {
             x: 16
             y: 50
-            width: 400
+            width: panel.listW
             spacing: 2
             Repeater {
                 model: panel.owner ? panel.owner.recent.slice(0, 8) : []
                 Rectangle {
                     id: recentRow
                     required property var modelData
-                    width: 400
+                    width: panel.listW
                     height: 52
                     radius: 8
                     color: recentArea.containsMouse ? panel.pal.tintHover : "transparent"
@@ -181,9 +184,9 @@ Item {
             }
         }
         Rectangle {
-            x: 432
+            x: panel.listW + 32
             y: 14
-            width: 312
+            width: panel.detailW
             height: parent.height - 30
             radius: 8
             color: panel.pal.tint
@@ -199,7 +202,7 @@ Item {
                     Item {
                         id: topApp
                         required property var modelData
-                        width: 98
+                        width: Math.floor((panel.detailW - 18) / 3)
                         height: 86
                         Rectangle {
                             anchors.fill: parent
@@ -247,7 +250,7 @@ Item {
         Flickable {
             x: 16
             y: 14
-            width: 404
+            width: panel.listW + 4
             height: parent.height - 28
             contentHeight: resultsCol.implicitHeight
             clip: true
@@ -255,7 +258,7 @@ Item {
             QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
             Column {
                 id: resultsCol
-                width: 400
+                width: panel.listW
                 spacing: 2
                 Repeater {
                     model: panel.box.results
@@ -263,7 +266,7 @@ Item {
                         id: entry
                         required property var modelData
                         required property int index
-                        width: 400
+                        width: panel.listW
                         readonly property bool best: index === 0
                         readonly property bool firstOfGroup: index === 1 || (index > 1 && panel.kindLabel(panel.box.results[index - 1]) !== panel.kindLabel(modelData))
                         readonly property bool isSelected: index === panel.box.selected
@@ -279,7 +282,7 @@ Item {
                             color: panel.pal.text2
                         }
                         Rectangle {
-                            width: 400
+                            width: panel.listW
                             height: entry.best ? 64 : 50
                             radius: 8
                             color: entry.isSelected || rowArea.containsMouse ? panel.pal.tintHover : "transparent"
@@ -342,9 +345,9 @@ Item {
         // details of the selected result
         Rectangle {
             visible: !!panel.current
-            x: 432
+            x: panel.listW + 32
             y: 14
-            width: 312
+            width: panel.detailW
             height: parent.height - 30
             radius: 8
             color: panel.pal.tint
