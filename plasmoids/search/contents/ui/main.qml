@@ -39,7 +39,9 @@ PlasmoidItem {
     Palette { id: design }
     Exec { id: exec }
     fullRepresentation: Item {}
-    toolTipMainText: "Search"
+    // no tooltip on the search box, like Windows (it would also sit over the
+    // results while you type); the plain button keeps "Search"
+    toolTipMainText: Settings.searchStyle === "bar" ? "" : "Search"
 
     compactRepresentation: Item {
         // Hidden in Tidewater's settings: no size and nothing drawn, so the
