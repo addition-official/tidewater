@@ -50,7 +50,7 @@ PlasmoidItem {
         Row {
             id: row
             height: parent.height
-            spacing: box.shown && box.corner ? Math.round(6 * design.unit) : 0
+            spacing: 0
 
             Item {
                 width: box.shown ? item.implicitWidth : 0
@@ -67,34 +67,59 @@ PlasmoidItem {
                 }
             }
 
-            // Show desktop corner, like Windows: a sliver of empty space at the
-            // far right; a thin line shows while you hover it.
-            // Click: show the desktop; click again: the windows come back
-            // (KWin's own "Show Desktop" toggle).
-            Item {
-                visible: box.corner
-                width: visible ? Math.max(6, Math.round(10 * design.unit)) : 0
-                height: parent.height
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 1
-                    height: Math.round(parent.height * 0.42)
-                    color: design.text2
-                    opacity: cornerArea.containsMouse ? 1 : 0
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 100
-                        }
+        }
+
+        // Show desktop corner, like Windows: the empty space at the far right
+        // end of the taskbar; a thin line shows while you hover it. It takes
+        // no room of its own: its area reaches from here to the screen
+        // edge, over the space that is there anyway.
+        // Click: show the desktop; click again: the windows come back
+        // (KWin's own "Show Desktop" toggle).
+        // (outside the Row: a Row does not place items with no width)
+        Item {
+            id: corner
+            visible: box.corner
+            anchors.left: row.right
+            width: 0
+            height: parent.height
+            property int reach: 8
+            function measure() {
+                const g = Plasmoid.containment ? Plasmoid.containment.screenGeometry : null;
+                if (!g || g.width <= 0)
+                    return;
+                const right = g.x + g.width - corner.mapToGlobal(0, 0).x;
+                corner.reach = Math.max(6, Math.min(48, Math.round(right)));
+            }
+            Component.onCompleted: Qt.callLater(measure)
+            onVisibleChanged: if (visible) Qt.callLater(measure)
+            // the panel can still be settling into place: look again now and then
+            Timer {
+                interval: 2000
+                running: corner.visible
+                repeat: true
+                onTriggered: corner.measure()
+            }
+            Rectangle {
+                x: Math.round(corner.reach / 2)
+                anchors.verticalCenter: parent.verticalCenter
+                width: 1
+                height: Math.round(parent.height * 0.42)
+                color: design.text2
+                opacity: cornerArea.containsMouse ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 100
                     }
                 }
-                MouseArea {
-                    id: cornerArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onContainsMouseChanged: root.cornerHovered = containsMouse
-                    onClicked: exec.run("busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s 'Show Desktop'", true)
-                }
+            }
+            MouseArea {
+                id: cornerArea
+                x: 0
+                width: corner.reach
+                height: parent.height
+                hoverEnabled: true
+                onContainsMouseChanged: root.cornerHovered = containsMouse
+                onClicked: exec.run("busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s 'Show Desktop'", true)
             }
         }
     }
