@@ -6,6 +6,7 @@
 // notification server; Plasma still draws the pop-ups themselves.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
@@ -149,10 +150,14 @@ PlasmoidItem {
     function ago(when) {
         if (!when) return "";
         const s = Math.max(0, (root.now - when.getTime()) / 1000);
-        if (s < 60) return "now";
-        if (s < 3600) return Math.floor(s / 60) + "m";
-        if (s < 86400) return Math.floor(s / 3600) + "h";
-        return Math.floor(s / 86400) + "d";
+        if (s < 60) return "Just now";
+        if (s < 3600) return Math.floor(s / 60) + " min ago";
+        if (s < 86400) return Math.floor(s / 3600) + " h ago";
+        const d = Math.floor(s / 86400);
+        return d === 1 ? "Yesterday" : d + " days ago";
+    }
+    function dismissGroup(entries) {
+        for (const e of entries) root.dismiss(e.id);
     }
     function clearAll() {
         history.clear(NotificationManager.Notifications.ClearExpired);
@@ -197,14 +202,14 @@ PlasmoidItem {
                 width: Math.max(16, badgeText.implicitWidth + 8)
                 height: 16
                 radius: 8
-                color: design.acc
+                color: "#e0393e"        // red, like the unread badges on the taskbar
                 border.width: 2
-                border.color: design.surface
+                border.color: Kirigami.Theme.backgroundColor
                 Text {
                     id: badgeText
                     anchors.centerIn: parent
                     text: root.unseen > 99 ? "99+" : String(root.unseen)
-                    color: design.accFg
+                    color: "white"
                     font.family: design.font
                     font.pixelSize: 9
                     font.bold: true
@@ -214,238 +219,277 @@ PlasmoidItem {
     }
 
     // ---- the center -------------------------------------------------------------
-    component TextButton: Rectangle {
-        id: tb
-        property string text
-        property bool filled: false
+    // In the manner of Windows 11: notifications grouped under their app's
+    // name and icon, one card each (newest first), two per app until "Show
+    // more"; Do not disturb and Clear all at the top.
+
+    // A small icon button, framed only while hovered (or while `on`).
+    component IconBtn: Rectangle {
+        id: ib
+        property string glyph
+        property string fallback
+        property string tip
+        property bool on: false
+        property int glyphSize: 20
         signal clicked()
-        implicitWidth: label.implicitWidth + 28
-        implicitHeight: 34
-        radius: Math.min(height / 2, 4)
-        color: filled ? design.acc : area.containsMouse ? design.s3 : design.s2
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Text {
-            id: label
+        implicitWidth: 32
+        implicitHeight: 32
+        radius: 6
+        color: on ? design.blue : ibArea.containsMouse ? design.tintHover : "transparent"
+        Glyph {
             anchors.centerIn: parent
-            text: tb.text
-            font.family: design.font
-            font.pixelSize: 13
-            color: tb.filled ? design.accFg : design.fg
+            name: ib.glyph; fallback: ib.fallback
+            size: ib.glyphSize; wght: 300
+            filled: ib.on
+            color: ib.on ? design.blueText : design.text1
+            fontAvailable: design.hasIconFont
         }
-        MouseArea { id: area; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tb.clicked() }
+        MouseArea {
+            id: ibArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ib.clicked()
+        }
+        QQC2.ToolTip.visible: ibArea.containsMouse && ib.tip !== ""
+        QQC2.ToolTip.text: ib.tip
+        QQC2.ToolTip.delay: 500
     }
 
-    component GroupCard: Item {
-        id: card
+    // One notification.
+    component NoteCard: Rectangle {
+        id: note
+        required property var entry
+        width: parent ? parent.width : 0
+        height: texts.implicitHeight + 24
+        radius: 8
+        color: noteArea.containsMouse ? design.tintHover : design.tint
+        border.width: 1
+        border.color: design.stroke
+        MouseArea {
+            id: noteArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: note.entry.hasDefault ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (note.entry.hasDefault) root.invoke(note.entry.id)
+        }
+        Column {
+            id: texts
+            x: 14
+            y: 12
+            width: parent.width - 28
+            spacing: 3
+            Item {
+                width: parent.width
+                height: Math.max(title.implicitHeight, 18)
+                Text {
+                    id: title
+                    width: parent.width - when.width - 12
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                    text: note.entry.summary
+                    textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
+                    font.family: design.font
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    color: note.entry.urgency === NotificationManager.Notifications.CriticalUrgency ? design.danger : design.text1
+                }
+                // the time; a close button in its place while hovered
+                Text {
+                    id: when
+                    visible: !noteArea.containsMouse && !closeBtn.hovered
+                    anchors.right: parent.right
+                    text: root.ago(note.entry.when)
+                    font.family: design.font
+                    font.pixelSize: 11
+                    color: design.text3
+                }
+                IconBtn {
+                    id: closeBtn
+                    readonly property bool hovered: closeHover.hovered
+                    visible: noteArea.containsMouse || hovered
+                    anchors.right: parent.right
+                    anchors.rightMargin: -6
+                    anchors.top: parent.top
+                    anchors.topMargin: -7
+                    width: 28
+                    height: 28
+                    glyph: "close"; fallback: "window-close"; glyphSize: 16
+                    tip: "Dismiss"
+                    onClicked: root.dismiss(note.entry.id)
+                    HoverHandler { id: closeHover }
+                }
+            }
+            Text {
+                visible: text.length > 0
+                width: parent.width
+                wrapMode: Text.Wrap
+                maximumLineCount: 4
+                elide: Text.ElideRight
+                text: note.entry.body
+                textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
+                font.family: design.font
+                font.pixelSize: 12
+                color: design.text2
+            }
+        }
+    }
+
+    // An app's notifications: its name and icon, then its cards.
+    component AppGroup: Column {
+        id: group
         required property var modelData
         readonly property var entries: modelData.entries
-        readonly property int count: entries.length
         readonly property bool open: !!root.openGroups[modelData.app]
-        readonly property bool stacked: count > 1 && !open
+        readonly property int shown: open ? Math.min(8, entries.length) : Math.min(2, entries.length)
         width: parent ? parent.width : 0
-        height: face.height + (stacked ? 8 : 0)
+        spacing: 6
 
-        // the card peeking out underneath when there is more than one
-        Rectangle {
-            visible: card.stacked
-            x: 12
-            y: face.height - 30
-            width: parent.width - 24
-            height: 38
-            radius: 6
-            color: design.s2
+        Item {
+            width: parent.width
+            height: 26
+            HoverHandler { id: headHover }
+            Row {
+                x: 4
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                Kirigami.Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 16
+                    height: 16
+                    source: group.modelData.icon || "preferences-desktop-notification"
+                    fallback: "preferences-desktop-notification"
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: group.modelData.app
+                    textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
+                    font.family: design.font
+                    font.pixelSize: 12
+                    color: design.text2
+                }
+            }
+            // clear this app's notifications (shown while hovering its name)
+            IconBtn {
+                visible: headHover.hovered
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 26
+                height: 26
+                glyph: "close"; fallback: "window-close"; glyphSize: 16
+                tip: "Clear " + group.modelData.app
+                onClicked: root.dismissGroup(group.entries)
+            }
         }
 
-        Rectangle {
-            id: face
-            width: parent.width
-            height: body.implicitHeight + 28
-            radius: Math.round(20 * 8 / 28)
-            color: design.s1
-            border.width: 1
-            border.color: design.out
+        Repeater {
+            model: group.entries.slice(0, group.shown)
+            NoteCard {
+                required property var modelData
+                entry: modelData
+            }
+        }
 
-            Column {
-                id: body
-                x: 16
-                y: 14
-                width: parent.width - 32
-                spacing: 0
-
-                Item {
-                    width: parent.width
-                    height: 20
-                    Row {
-                        spacing: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        Glyph {
-                            anchors.verticalCenter: parent.verticalCenter
-                            name: "notifications"
-                            fallback: card.modelData.icon || "preferences-desktop-notification"
-                            size: 18
-                            color: design.acc
-                            fontAvailable: design.hasIconFont
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: card.modelData.app
-                            textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                            font.family: design.font
-                            font.pixelSize: 13
-                            font.weight: Font.Medium
-                            color: design.fg
-                        }
-                        Rectangle {
-                            visible: card.count > 1
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: countText.implicitWidth + 14
-                            height: 18
-                            radius: 3
-                            color: design.accC
-                            Text {
-                                id: countText
-                                anchors.centerIn: parent
-                                text: String(card.count)
-                                font.family: design.font
-                                font.pixelSize: 11
-                                color: design.accCFg
-                            }
-                        }
-                    }
-                    Text {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.ago(card.entries[0] ? card.entries[0].when : null)
-                        font.family: "monospace"
-                        font.pixelSize: 11
-                        color: design.mut
-                    }
-                }
-
-                Item { width: 1; height: 8 }
-
-                Repeater {
-                    model: card.open ? card.entries.slice(0, 8) : card.entries.slice(0, 1)
-                    Column {
-                        id: note
-                        required property var modelData
-                        required property int index
-                        width: body.width
-                        Item { visible: note.index > 0; width: 1; height: 8 }
-                        Rectangle { visible: note.index > 0; width: parent.width; height: 1; color: design.out }
-                        Item { visible: note.index > 0; width: 1; height: 8 }
-                        Item {
-                            width: parent.width
-                            height: texts.implicitHeight
-                            HoverHandler { id: noteHover }
-                            Column {
-                                id: texts
-                                width: parent.width - 24
-                                Text {
-                                    width: parent.width
-                                    wrapMode: Text.Wrap
-                                    maximumLineCount: 2
-                                    elide: Text.ElideRight
-                                    text: note.modelData.summary
-                                    textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                                    font.family: design.font
-                                    font.pixelSize: 14
-                                    font.weight: Font.Medium
-                                    color: note.modelData.urgency === NotificationManager.Notifications.CriticalUrgency ? design.danger : design.fg
-                                }
-                                Text {
-                                    visible: text.length > 0
-                                    width: parent.width
-                                    wrapMode: Text.Wrap
-                                    maximumLineCount: 4
-                                    elide: Text.ElideRight
-                                    text: note.modelData.body
-                                    textFormat: Text.PlainText   // app/web-supplied text: never render it as HTML
-                                    font.family: design.font
-                                    font.pixelSize: 13
-                                    color: design.mut
-                                }
-                            }
-                            MouseArea {
-                                id: noteArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: note.modelData.hasDefault ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (note.modelData.hasDefault) root.invoke(note.modelData.id)
-                            }
-                            IconButton {
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.topMargin: -4
-                                visible: noteHover.hovered
-                                pal: design
-                                size: 24
-                                glyph: "close"
-                                fallback: "window-close"
-                                color: design.mut
-                                onClicked: root.dismiss(note.modelData.id)
-                            }
-                        }
-                    }
-                }
-
-                Item { visible: card.count > 1; width: 1; height: 12 }
-                TextButton {
-                    visible: card.count > 1
-                    text: card.open ? "Show less" : (card.count - 1) + " more"
-                    onClicked: root.setGroupOpen(card.modelData.app, !card.open)
-                }
+        Text {
+            visible: group.entries.length > 2
+            leftPadding: 4
+            height: 24
+            verticalAlignment: Text.AlignVCenter
+            text: group.open ? "Show less" : "Show " + (group.entries.length - 2) + " more"
+            font.family: design.font
+            font.pixelSize: 12
+            color: moreArea.containsMouse ? Qt.lighter(design.blue, 1.15) : design.blue
+            MouseArea {
+                id: moreArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.setGroupOpen(group.modelData.app, !group.open)
             }
         }
     }
 
     fullRepresentation: Item {
         FloatingPopup {}
-        Layout.preferredWidth: 424
-        Layout.minimumWidth: 424
-        Layout.maximumWidth: 424
-        Layout.preferredHeight: center.implicitHeight + 40
+        Layout.preferredWidth: 380
+        Layout.minimumWidth: 380
+        Layout.maximumWidth: 380
+        Layout.preferredHeight: center.implicitHeight + 36
         Layout.minimumHeight: Layout.preferredHeight
+        Layout.maximumHeight: Layout.preferredHeight
 
         Column {
             id: center
-            x: 20
-            y: 20
-            width: parent.width - 40
-            spacing: 14
+            x: 16
+            y: 16
+            width: parent.width - 32
+            spacing: 12
 
             Item {
                 width: parent.width
-                height: 34
+                height: 32
                 Text {
+                    x: 4
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Notifications"
                     font.family: design.font
-                    font.pixelSize: 18
-                    font.weight: Font.Medium
-                    color: design.fg
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    color: design.text1
                 }
                 Row {
                     anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     spacing: 6
-                    TextButton { text: "Do not disturb"; filled: root.quiet; onClicked: root.toggleDnd() }
-                    TextButton { text: "Clear all"; visible: history.count > 0; onClicked: root.clearAll() }
+                    IconBtn {
+                        glyph: "notifications_off"; fallback: "notifications-disabled"
+                        on: root.quiet
+                        tip: root.quiet ? "Turn off Do not disturb" : "Do not disturb"
+                        onClicked: root.toggleDnd()
+                    }
+                    Rectangle {
+                        visible: history.count > 0
+                        width: clearText.implicitWidth + 22
+                        height: 32
+                        radius: 6
+                        color: clearArea.containsMouse ? design.tintHover : design.tint
+                        border.width: 1
+                        border.color: design.stroke
+                        Text {
+                            id: clearText
+                            anchors.centerIn: parent
+                            text: "Clear all"
+                            font.family: design.font
+                            font.pixelSize: 12
+                            color: design.text1
+                        }
+                        MouseArea {
+                            id: clearArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.clearAll()
+                        }
+                    }
                 }
             }
 
             Flickable {
+                visible: root.groups.length > 0
                 width: parent.width
-                height: Math.min(contentHeight, 560)
+                height: Math.min(contentHeight, 520)
                 contentHeight: list.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
                 Column {
                     id: list
                     width: parent.width
-                    spacing: 12
+                    spacing: 14
                     Repeater {
                         model: root.groups
-                        GroupCard {}
+                        AppGroup {}
                     }
                 }
             }
@@ -453,23 +497,23 @@ PlasmoidItem {
             Column {
                 visible: root.groups.length === 0
                 width: parent.width
-                topPadding: 24
-                bottomPadding: 24
-                spacing: 8
+                topPadding: 28
+                bottomPadding: 28
+                spacing: 10
                 Glyph {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    name: root.quiet ? "notifications_off" : "notifications_none"
+                    name: root.quiet ? "notifications_off" : "notifications"
                     fallback: "notifications"
-                    size: 36
-                    color: design.mut
+                    size: 32; wght: 300
+                    color: design.text3
                     fontAvailable: design.hasIconFont
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.quiet ? "Do not disturb is on" : "No notifications"
+                    text: root.quiet ? "Do not disturb is on" : "No new notifications"
                     font.family: design.font
-                    font.pixelSize: 14
-                    color: design.mut
+                    font.pixelSize: 13
+                    color: design.text2
                 }
             }
         }
