@@ -110,6 +110,30 @@ PlasmoidItem {
             stopTyping();
         }
 
+        // A click anywhere else on the taskbar ends the typing, like Windows.
+        // (Clicking empty space or another widget's button does not move the
+        // keyboard, so the box would not notice.) While typing, this lies
+        // over the whole panel, ends the typing on a press outside the box,
+        // and lets the press through to whatever is underneath.
+        Item {
+            id: clickCatcher
+            readonly property Item panelRoot: searchBar.Window.window ? searchBar.Window.window.contentItem : null
+            parent: searchBar.parent.typing && panelRoot ? panelRoot : searchBar.parent
+            anchors.fill: parent
+            z: 100000
+            visible: searchBar.parent.typing
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                onPressed: mouse => {
+                    const p = mapToItem(searchBar, mouse.x, mouse.y);
+                    if (!searchBar.contains(p))
+                        searchBar.parent.stopTyping();
+                    mouse.accepted = false;      // the press goes on to what is underneath
+                }
+            }
+        }
+
         Rectangle {
             id: searchBar
             visible: parent.shown && parent.bar
