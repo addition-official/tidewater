@@ -27,6 +27,7 @@ Item {
     property string text
     property real size: Math.max(22, Math.round(44 * pal.unit))
     property real glyphSize: Math.max(16, Math.round(20 * pal.unit))
+    property real imageSize: Math.round(glyphSize * 1.15)   // for `image`
     readonly property bool hovered: area.containsMouse
     readonly property real padding: Math.round(14 * Math.max(0.75, pal.unit))
     readonly property color contentColor: accent ? pal.accFg : accentGlyph ? pal.acc : filled ? pal.mut : pal.fg
@@ -69,7 +70,7 @@ Item {
         Kirigami.Icon {
             anchors.verticalCenter: parent.verticalCenter
             visible: b.glyph.length === 0 && b.image.length > 0
-            width: Math.round(b.glyphSize * 1.15)
+            width: b.imageSize
             height: width
             source: b.image
             color: b.imageTinted ? b.contentColor : "transparent"

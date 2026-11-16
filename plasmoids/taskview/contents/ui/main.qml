@@ -50,6 +50,9 @@ PlasmoidItem {
             // for light mode (common/taskview.svg, taskview-light.svg)
             image: Qt.resolvedUrl(design.dark ? "common/taskview.svg" : "common/taskview-light.svg")
             imageTinted: false
+            // as big as the app icons beside it (a little smaller, as it is a
+            // solid shape), like the Task View button on Windows
+            imageSize: Math.round(Settings.iconSize * 0.8)
             onClicked: exec.run("busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s Overview")
         }
     }

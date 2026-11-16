@@ -176,7 +176,8 @@ PlasmoidItem {
                 name: "notifications"; fallback: "notifications"
                 // the user's bell, and the matching plain one (common/Glyph.qml)
                 svg: notifs.quiet ? "snooze" : notifs.unseen > 0 ? "bell_filled" : "bell"
-                size: 16
+                // small beside the time, like the Windows 11 bell
+                size: 13
                 color: notifs.unseen > 0 && !notifs.quiet ? design.blue : design.fg
                 fontAvailable: design.hasIconFont
             }
