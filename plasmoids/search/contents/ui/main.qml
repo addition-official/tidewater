@@ -17,6 +17,12 @@ import "../../../../../tidewater/qml"
 PlasmoidItem {
     id: root
     preferredRepresentation: compactRepresentation
+    // Search turned off in Tidewater's settings: hidden from the panel
+    // altogether (a widget with no size still gets the panel's gap on each
+    // side). Set by hand, not bound: typing in the box changes the status too.
+    readonly property bool turnedOff: Settings.searchStyle === "hidden"
+    onTurnedOffChanged: Plasmoid.status = turnedOff ? PlasmaCore.Types.HiddenStatus : PlasmaCore.Types.PassiveStatus
+    Component.onCompleted: if (turnedOff) Plasmoid.status = PlasmaCore.Types.HiddenStatus
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
     // Right-click > "Tidewater settings...": opens the start button's settings

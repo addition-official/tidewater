@@ -17,6 +17,9 @@ import "../../../../../tidewater/qml"
 PlasmoidItem {
     id: root
     preferredRepresentation: compactRepresentation
+    // Turned off in Tidewater's settings: hidden from the panel altogether
+    // (a widget with no size still gets the panel's gap on each side)
+    Plasmoid.status: Settings.workspaces !== "hidden" ? PlasmaCore.Types.PassiveStatus : PlasmaCore.Types.HiddenStatus
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
     // Right-click > "Tidewater settings...": opens the start button's settings

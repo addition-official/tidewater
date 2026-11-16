@@ -13,6 +13,9 @@ import "../../../../../tidewater/qml"
 PlasmoidItem {
     id: root
     preferredRepresentation: compactRepresentation
+    // Turned off in Tidewater's settings: hidden from the panel altogether
+    // (a widget with no size still gets the panel's gap on each side)
+    Plasmoid.status: Settings.showPower || Settings.showDesktopCorner ? PlasmaCore.Types.PassiveStatus : PlasmaCore.Types.HiddenStatus
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
     // Right-click > "Tidewater settings...": opens the start button's settings
@@ -41,9 +44,9 @@ PlasmoidItem {
         // item's visible itself when it shows the widget.
         readonly property bool shown: Settings.showPower
         readonly property bool corner: Settings.showDesktopCorner
-        // the corner's own sliver, kept whether the corner is on or off, so
-        // turning it on or off never moves anything
-        readonly property int gap: Math.max(6, Math.round(8 * design.unit))
+        // the corner's own sliver (its area also takes in the panel's margin
+        // up to the screen edge)
+        readonly property int gap: corner ? Math.max(4, Math.round(5 * design.unit)) : 0
         readonly property int w: row.implicitWidth + gap
         Layout.minimumWidth: w
         Layout.preferredWidth: w
@@ -73,9 +76,8 @@ PlasmoidItem {
         }
 
         // Show desktop corner, like Windows: a thin sliver at the far right
-        // end of the taskbar; a thin line shows while you hover it. The
-        // sliver is always there (empty while the corner is off); while on,
-        // its area also reaches over any space left up to the panel's edge.
+        // end of the taskbar; a thin line shows while you hover it. Its area
+        // also reaches over the panel's own margin, up to the screen edge.
         // Click: show the desktop; click again: the windows come back
         // (KWin's own "Show Desktop" toggle).
         Item {
