@@ -117,6 +117,7 @@ PlasmoidItem {
     readonly property real k: Math.max(0.7, design.unit)
 
     compactRepresentation: Item {
+        NoOpenLine {}   // no Plasma "open" line over the panel (common/NoOpenLine.qml)
         Layout.minimumWidth: face.width
         Layout.preferredWidth: face.width
         Layout.maximumWidth: face.width

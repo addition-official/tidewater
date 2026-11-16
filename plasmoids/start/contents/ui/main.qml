@@ -387,6 +387,7 @@ PlasmoidItem {
 
     // ---- in the panel -------------------------------------------------------------
     compactRepresentation: Item {
+        NoOpenLine {}   // no Plasma "open" line over the panel (common/NoOpenLine.qml)
         Layout.minimumWidth: button.implicitWidth
         Layout.preferredWidth: button.implicitWidth
         Layout.maximumWidth: button.implicitWidth

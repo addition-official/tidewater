@@ -56,6 +56,7 @@ PlasmoidItem {
 
     // ---- the bell (hidden unless turned on) -------------------------------------
     compactRepresentation: Item {
+        NoOpenLine {}   // no Plasma "open" line over the panel (common/NoOpenLine.qml)
         // Hidden: no size and nothing drawn, so the panel closes up around it.
         // "visible" goes on the content, not on this item: Plasma sets this
         // item's visible itself when it shows the widget.

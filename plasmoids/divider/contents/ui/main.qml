@@ -35,6 +35,7 @@ PlasmoidItem {
     toolTipMainText: ""
 
     compactRepresentation: Item {
+        NoOpenLine {}   // no Plasma "open" line over the panel (common/NoOpenLine.qml)
         // Hidden in Tidewater's settings: no size and nothing drawn, so the
         // panel closes up around it (Plasma's own Remove still works too).
         // "visible" goes on the content, not on this item: Plasma sets this
