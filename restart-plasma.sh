@@ -21,18 +21,33 @@ has_busctl=0
 command -v busctl >/dev/null 2>&1 && has_busctl=1
 bus_free() { ! busctl --user status org.kde.plasmashell >/dev/null 2>&1; }
 
+# After Plasma has quit: stop Tidewater's helpers that can outlive it (the
+# taskbar's badge watcher waits up to 25 s for a message), and wait until
+# Plasma's old session (its systemd unit) has really ended. A new Plasma
+# started while the old one was still winding down crashed on startup.
+finish_stop() {
+    pkill -u "$(id -u)" -f 'tidewater\.tasks/contents/code/launcher-watch\.sh' 2>/dev/null
+    pkill -u "$(id -u)" -f 'com\.canonical\.Unity\.LauncherEntry' 2>/dev/null
+    for _ in $(seq 1 40); do
+        systemctl --user list-units --state=active --no-legend 'app-plasmashell@*' \
+            'plasma-plasmashell.service' 2>/dev/null | grep -q . || break
+        sleep 0.25
+    done
+    return 0
+}
+
 stop_plasma() {
-    running || return 0
+    running || { finish_stop; return 0; }
     # still starting (no D-Bus name yet): let it finish first, see start_plasma
     [ "$has_busctl" = 1 ] && for _ in $(seq 1 40); do bus_free || break; sleep 0.25; done
     if systemctl --user is-active --quiet plasma-plasmashell.service 2>/dev/null; then
         systemctl --user stop plasma-plasmashell.service 2>/dev/null
     fi
     running && { kquitapp6 plasmashell >/dev/null 2>&1 || true; }
-    for _ in $(seq 1 40); do running || return 0; sleep 0.25; done
+    for _ in $(seq 1 40); do running || { finish_stop; return 0; }; sleep 0.25; done
     # still there after 10 seconds: ask it to quit the plain way
     pkill -u "$(id -u)" -x plasmashell 2>/dev/null
-    for _ in $(seq 1 20); do running || return 0; sleep 0.25; done
+    for _ in $(seq 1 20); do running || { finish_stop; return 0; }; sleep 0.25; done
     return 1
 }
 
