@@ -16,13 +16,11 @@
       <stop offset=".2" stop-color="#000" stop-opacity=".15"/>
       <stop offset=".6" stop-color="#000" stop-opacity=".29"/>
     </linearGradient>
-    <clipPath id="ow-cf"><rect x="21.4" y="12.75" width="29.2" height="25.25" rx="1"/></clipPath>
-    <clipPath id="ow-cb"><rect x="11.9" y="22.25" width="29.2" height="25.05" rx="1"/></clipPath>
   </defs>
   <rect x="21.4" y="12.75" width="29.3" height="25.25" rx="1" fill="url(#ow-front)"/>
-  <rect x="21.4" y="36" width="29.2" height="2" fill="url(#ow-lip-f)" clip-path="url(#ow-cf)"/>
+  <path d="M21.4 36H50.6V37A1 1 0 0 1 49.6 38H22.4A1 1 0 0 1 21.4 37Z" fill="url(#ow-lip-f)"/>
   <g opacity=".6">
     <rect x="11.9" y="22.25" width="29.2" height="25.05" rx="1" fill="url(#ow-back)"/>
-    <rect x="11.9" y="44.8" width="29.2" height="2.5" fill="url(#ow-lip-b)" clip-path="url(#ow-cb)"/>
+    <path d="M11.9 44.8H41.1V46.3A1 1 0 0 1 40.1 47.3H12.9A1 1 0 0 1 11.9 46.3Z" fill="url(#ow-lip-b)"/>
   </g>
 </svg>
