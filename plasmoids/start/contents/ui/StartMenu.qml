@@ -44,7 +44,7 @@ Item {
     }
     function activate(item) {
         if (!item) return;
-        if (item.kind === "app") app.launch(item.id);
+        if (item.kind === "app" || item.kind === "setting") app.launch(item.id);
         else if (item.kind === "file") app.openUrl(item.url);
         else if (item.kind === "action") app.session(item.id);
     }
@@ -490,6 +490,7 @@ Item {
                             height: 30
                             verticalAlignment: Text.AlignVCenter
                             text: resultEntry.modelData.kind === "app" ? "Apps"
+                                : resultEntry.modelData.kind === "setting" ? "Settings"
                                 : resultEntry.modelData.kind === "file" ? "Files" : "Actions"
                             font.pixelSize: 12
                             strong: true

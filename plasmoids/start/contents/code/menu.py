@@ -257,6 +257,36 @@ def apps():
     return result
 
 
+def settings_pages():
+    """KDE's System Settings pages (kcm_*.desktop), for search. They are hidden
+    from app menus (NoDisplay), so apps() leaves them out."""
+    seen, result = set(), []
+    for d in data_dirs():
+        base = os.path.join(d, "applications")
+        for path in desktop_files(base):
+            did = os.path.relpath(path, base).replace("/", "-")
+            if did in seen:
+                continue
+            seen.add(did)
+            if not did.startswith("kcm_"):
+                continue
+            e = read_desktop(path)
+            if not e or e.get("Type") != "Application" or e.get("Hidden") == "true":
+                continue
+            name = localized(e, "Name")
+            if not name:
+                continue
+            result.append({
+                "id": did,
+                "name": name,
+                "comment": localized(e, "Comment"),
+                "icon": e.get("Icon", "preferences-system"),
+                "keywords": localized(e, "X-KDE-Keywords") or localized(e, "Keywords"),
+            })
+    result.sort(key=lambda a: a["name"].lower())
+    return result
+
+
 def valid_id(did):
     """A desktop file id is a plain name like org.kde.dolphin.desktop: no
     folders, not hidden, nothing that could point outside applications/."""
@@ -646,6 +676,8 @@ def main():
     arg = " ".join(sys.argv[2:])
     if cmd == "apps":
         out(apps())
+    elif cmd == "settings":
+        out(settings_pages())
     elif cmd == "recent":
         out(recent())
     elif cmd == "files":
@@ -671,7 +703,7 @@ def main():
     elif cmd == "session":
         session(arg)
     else:
-        sys.stderr.write("usage: menu.py apps | recent | files Q | stats | media | media-cmd M | launch ID"
+        sys.stderr.write("usage: menu.py apps | settings | recent | files Q | stats | media | media-cmd M | launch ID"
                          " | action ID ACTION | open URL | taskbar-pins | taskbar-pin ID | taskbar-unpin ID"
                          " | session WHAT\n")
         sys.exit(2)

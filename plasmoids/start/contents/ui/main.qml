@@ -24,6 +24,7 @@ PlasmoidItem {
 
     // ---- data -------------------------------------------------------------------
     property var apps: []
+    property var settingsPages: []    // System Settings pages, for search
     property var recent: []
     property var stats: ({})
     property var media: ({})
@@ -50,6 +51,7 @@ PlasmoidItem {
             let data = null;
             try { data = JSON.parse(out); } catch (e) { return; }
             if (rest === "apps") root.apps = data;
+            else if (rest === "settings") root.settingsPages = data;
             else if (rest === "recent") root.recent = data;
             else if (rest === "stats") root.stats = data;
             else if (rest === "media") root.media = data;
@@ -111,6 +113,7 @@ PlasmoidItem {
     Component.onCompleted: {
         Launchers.add(root);
         py("apps");
+        py("settings");
         py("stats");
         startSettings();
     }
@@ -224,12 +227,23 @@ PlasmoidItem {
         scored.sort((x, y) => y.s - x.s || x.a.name.localeCompare(y.a.name));
         const out = scored.slice(0, 7).map(x => ({ kind: "app", id: x.a.id, name: x.a.name, icon: x.a.icon,
                                                    description: x.a.generic || x.a.comment || "" }));
-        for (const a of actions)
-            if (a.name.toLowerCase().indexOf(ql) >= 0) out.push(act(a));
+        // System Settings pages, by name first, then by keywords and description
+        const pages = [];
+        for (const p of settingsPages) {
+            const n = p.name.toLowerCase();
+            const s = n.startsWith(ql) ? 3 : n.indexOf(ql) >= 0 ? 2
+                    : ((p.keywords || "") + " " + (p.comment || "")).toLowerCase().indexOf(ql) >= 0 ? 1 : 0;
+            if (s > 0) pages.push({ s: s, p: p });
+        }
+        pages.sort((x, y) => y.s - x.s || x.p.name.localeCompare(y.p.name));
+        for (const x of pages.slice(0, 4))
+            out.push({ kind: "setting", id: x.p.id, name: x.p.name, icon: x.p.icon, description: x.p.comment || "System Settings" });
         if (files && files.q === q)
             for (const f of files.items.slice(0, 5))
-                out.push({ kind: "file", url: f.url, name: f.name, glyph: f.folder ? "folder_open" : "description",
-                           description: f.dir });
+                out.push({ kind: "file", url: f.url, name: f.name, folder: f.folder, icon: f.icon,
+                           glyph: f.folder ? "folder_open" : "description", description: f.dir });
+        for (const a of actions)
+            if (a.name.toLowerCase().indexOf(ql) >= 0) out.push(act(a));
         return out;
     }
 

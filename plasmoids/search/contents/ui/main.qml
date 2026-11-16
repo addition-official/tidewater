@@ -80,8 +80,18 @@ PlasmoidItem {
         property string query: ""
         property int selected: 0
         property bool typing: false      // between startTyping() and stopTyping()
-        // at most ten, so the panel always fits above the taskbar
-        readonly property var results: owner && query.trim().length > 0 ? owner.search(query, owner.fileResults).slice(0, 10) : []
+        property string tab: "all"       // the panel's filter: all, apps, documents, folders, settings
+        onTabChanged: selected = 0
+        readonly property var results: {
+            if (!owner || query.trim().length === 0) return [];
+            const all = owner.search(query, owner.fileResults);
+            const keep = tab === "apps" ? (r => r.kind === "app")
+                       : tab === "documents" ? (r => r.kind === "file" && !r.folder)
+                       : tab === "folders" ? (r => r.kind === "file" && r.folder)
+                       : tab === "settings" ? (r => r.kind === "setting")
+                       : (r => true);
+            return all.filter(keep);
+        }
         function startTyping() {
             typing = true;
             Plasmoid.status = PlasmaCore.Types.AcceptingInputStatus;
@@ -90,13 +100,14 @@ PlasmoidItem {
         }
         function stopTyping() {
             typing = false;
+            tab = "all";
             field.text = "";
             field.focus = false;
             Plasmoid.status = PlasmaCore.Types.PassiveStatus;
         }
         function activate(item) {
             if (!item || !owner) return;
-            if (item.kind === "app") owner.launch(item.id);
+            if (item.kind === "app" || item.kind === "setting") owner.launch(item.id);
             else if (item.kind === "file") owner.openUrl(item.url);
             else if (item.kind === "action") owner.session(item.id);
             stopTyping();
@@ -181,7 +192,7 @@ PlasmoidItem {
             flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
             location: PlasmaCore.Types.Floating
             backgroundHints: PlasmaCore.Dialog.StandardBackground
-            visible: searchBar.visible && searchBar.parent.typing && searchBar.parent.query.trim().length > 0
+            visible: searchBar.visible && searchBar.parent.typing
             // If the window system gives the results the keyboard anyway, hand
             // it straight back to the box, so the typing goes on there.
             onActiveChanged: if (active) {
@@ -202,114 +213,10 @@ PlasmoidItem {
                 y = Math.max(g.y + 8, Math.round(p.y - h - 10));
             }
 
-            mainItem: Item {
-                width: list.width
-                height: list.height
-                Column {
-                    id: list
-                    width: 520
-                    padding: 8
-                    readonly property var box: searchBar.parent
-                    Repeater {
-                        model: list.box.results
-                        Column {
-                            id: entry
-                            required property var modelData
-                            required property int index
-                            width: list.width - 16
-                            readonly property bool firstOfKind: index === 0 || list.box.results[index - 1].kind !== modelData.kind
-                            Text {
-                                visible: entry.firstOfKind
-                                leftPadding: 8
-                                height: 28
-                                verticalAlignment: Text.AlignVCenter
-                                text: entry.modelData.kind === "app" ? "Apps" : entry.modelData.kind === "file" ? "Files" : "Actions"
-                                font.family: design.font
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                                color: design.text2
-                            }
-                            Rectangle {
-                                id: row
-                                readonly property bool isSelected: entry.index === list.box.selected
-                                width: parent.width
-                                height: entry.modelData.kind === "action" ? 40 : 48
-                                radius: 6
-                                color: isSelected || rowArea.containsMouse ? design.tintHover : "transparent"
-                                Rectangle {
-                                    visible: row.isSelected
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 3; height: 16; radius: 1.5
-                                    color: design.blue
-                                }
-                                Item {
-                                    id: rowIcon
-                                    x: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 26; height: 26
-                                    Kirigami.Icon {
-                                        anchors.fill: parent
-                                        visible: entry.modelData.kind !== "action"
-                                        source: entry.modelData.icon || (entry.modelData.kind === "app" ? "application-x-executable" : "text-x-generic")
-                                        fallback: entry.modelData.kind === "app" ? "application-x-executable" : "text-x-generic"
-                                    }
-                                    Glyph {
-                                        anchors.centerIn: parent
-                                        visible: entry.modelData.kind === "action"
-                                        name: entry.modelData.glyph || ""
-                                        size: 20; wght: 300
-                                        color: design.text1
-                                        fontAvailable: design.hasIconFont
-                                    }
-                                }
-                                Column {
-                                    anchors.left: rowIcon.right
-                                    anchors.leftMargin: 12
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        width: parent.width
-                                        elide: Text.ElideRight
-                                        text: entry.modelData.name
-                                        textFormat: Text.PlainText   // app/file names: never render as HTML
-                                        font.family: design.font
-                                        font.pixelSize: 13
-                                        color: design.text1
-                                    }
-                                    Text {
-                                        visible: entry.modelData.kind !== "action" && text.length > 0
-                                        width: parent.width
-                                        elide: Text.ElideRight
-                                        text: entry.modelData.description || ""
-                                        textFormat: Text.PlainText
-                                        font.family: design.font
-                                        font.pixelSize: 12
-                                        color: design.text2
-                                    }
-                                }
-                                MouseArea {
-                                    id: rowArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onEntered: list.box.selected = entry.index
-                                    onClicked: list.box.activate(entry.modelData)
-                                }
-                            }
-                        }
-                    }
-                    Text {
-                        visible: list.box.results.length === 0
-                        leftPadding: 8
-                        height: 36
-                        verticalAlignment: Text.AlignVCenter
-                        text: "No matches"
-                        font.family: design.font
-                        font.pixelSize: 13
-                        color: design.text2
-                    }
-                }
+            mainItem: SearchPanel {
+                id: list
+                box: searchBar.parent
+                pal: design
             }
         }
     }
