@@ -66,6 +66,7 @@ Column {
                 Glyph {
                     anchors.centerIn: parent
                     name: "notifications_off"; fallback: "notifications-disabled"
+                    svg: "snooze"
                     size: 18; wght: 300
                     filled: panel.notes.quiet
                     color: panel.notes.quiet ? panel.pal.blueText : panel.pal.text1

@@ -395,6 +395,7 @@ PlasmoidItem {
                     pal: design
                     title: "Do not disturb"
                     glyph: "notifications_off"
+                    svg: "snooze"     // the user's own drawing (see common/Glyph.qml)
                     fallback: "notifications-disabled-symbolic"
                     on: !!root.st.dnd
                     subtitle: root.st.dnd ? "On" : "Off"

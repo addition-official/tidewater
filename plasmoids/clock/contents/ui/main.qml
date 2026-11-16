@@ -187,6 +187,7 @@ PlasmoidItem {
                     visible: notifs.quiet
                     anchors.centerIn: parent
                     name: "notifications_off"; fallback: "notifications-disabled"
+                    svg: "snooze"
                     size: 16
                     color: design.fg
                     fontAvailable: design.hasIconFont

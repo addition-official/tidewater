@@ -70,6 +70,7 @@ PlasmoidItem {
             size: Math.max(22, Math.round(40 * design.unit))
             active: root.expanded
             glyph: notifs.quiet ? "notifications_off" : "notifications"
+            svg: notifs.quiet ? "snooze" : ""
             fallback: "notifications"
             onClicked: mouse => {
                 if (mouse.button === Qt.MiddleButton) notifs.toggleDnd();

@@ -18,6 +18,7 @@ Item {
     property bool accentGlyph: false   // blue icon on a plain button (start button while closed)
     property string glyph
     property string fallback
+    property string svg                // a drawing in Glyph.qml, used instead of `glyph`
     // An icon theme name or picture address, shown when there is no glyph.
     // Tinted: drawn in the button's colors (theme icons that support it);
     // otherwise shown in its own colors.
@@ -60,6 +61,7 @@ Item {
             visible: b.glyph.length > 0
             name: b.glyph
             fallback: b.fallback
+            svg: b.svg
             size: b.glyphSize
             color: b.contentColor
             fontAvailable: b.pal.hasIconFont
