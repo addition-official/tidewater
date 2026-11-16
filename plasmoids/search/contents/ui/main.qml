@@ -98,6 +98,8 @@ PlasmoidItem {
         onTabChanged: selected = 0
         readonly property var results: owner && query.trim().length > 0 ? owner.searchIn(query, tab) : []
         function startTyping() {
+            resultsPopup.place();          // in place before it shows (no flash)
+            Settings.searchStarted(searchBar.parent);  // a search box on another monitor stops
             typing = true;
             Plasmoid.status = PlasmaCore.Types.AcceptingInputStatus;
             field.forceActiveFocus();
@@ -106,23 +108,39 @@ PlasmoidItem {
         // The box lets go of the keyboard: to the panel itself, not to Plasma's
         // wrapper around this widget (that would hand it straight back).
         function dropFocus() {
-            field.focus = false;
             const win = searchBar.Window.window;
-            if (win && win.contentItem && field.activeFocus) win.contentItem.forceActiveFocus();
+            if (win && win.contentItem) win.contentItem.forceActiveFocus();
+            field.focus = false;
         }
-        function stopTyping() {
+        // Ends the typing. `goBack` (Escape): the window you were in before
+        // gets the keyboard back. Otherwise (you clicked something, or opened
+        // a result) nothing is handed back: Plasma would otherwise bring back
+        // the old window on top of what you just clicked or opened.
+        function stopTyping(goBack) {
             typing = false;
             tab = "all";
             field.text = "";
             dropFocus();
-            Plasmoid.status = PlasmaCore.Types.PassiveStatus;
+            if (!goBack)
+                Plasmoid.status = PlasmaCore.Types.ActiveStatus;   // forgets the old window
+            Plasmoid.status = root.turnedOff ? PlasmaCore.Types.HiddenStatus : PlasmaCore.Types.PassiveStatus;
+        }
+        // the search style changed while typing: end it
+        onBarChanged: if (!bar && typing) stopTyping(false)
+        onShownChanged: if (!shown && typing) stopTyping(false)
+        Connections {
+            target: Settings
+            function onSearchStarted(box) {
+                if (box !== searchBar.parent && searchBar.parent.typing)
+                    searchBar.parent.stopTyping(false);
+            }
         }
         function activate(item) {
             if (!item || !owner) return;
             if (item.kind === "app" || item.kind === "setting") owner.launch(item.id);
             else if (item.kind === "file") owner.openUrl(item.url);
             else if (item.kind === "action") owner.session(item.id);
-            stopTyping();
+            stopTyping(false);
         }
 
         // A click anywhere else on the taskbar ends the typing, like Windows.
@@ -143,7 +161,7 @@ PlasmoidItem {
                 onPressed: mouse => {
                     const p = mapToItem(searchBar, mouse.x, mouse.y);
                     if (!searchBar.contains(p))
-                        searchBar.parent.stopTyping();
+                        searchBar.parent.stopTyping(false);
                     mouse.accepted = false;      // the press goes on to what is underneath
                 }
             }
@@ -207,13 +225,13 @@ PlasmoidItem {
                     Qt.callLater(searchBar.parent.dropFocus);
                 } else if (!activeFocus) Qt.callLater(() => {
                     if (!field.activeFocus && !resultsPopup.active && searchBar.parent.typing)
-                        searchBar.parent.stopTyping();
+                        searchBar.parent.stopTyping(false);
                 })
                 Keys.onDownPressed: searchBar.parent.selected = Math.max(0, Math.min(searchBar.parent.results.length - 1, searchBar.parent.selected + 1))
                 Keys.onUpPressed: searchBar.parent.selected = Math.max(0, searchBar.parent.selected - 1)
                 Keys.onReturnPressed: searchBar.parent.activate(searchBar.parent.results[searchBar.parent.selected])
                 Keys.onEnterPressed: searchBar.parent.activate(searchBar.parent.results[searchBar.parent.selected])
-                Keys.onEscapePressed: searchBar.parent.stopTyping()
+                Keys.onEscapePressed: searchBar.parent.stopTyping(true)
             }
             // Until you are typing, a click anywhere on the box (above the text
             // field) starts typing: the panel has to be asked for the keyboard.
@@ -240,8 +258,8 @@ PlasmoidItem {
             location: PlasmaCore.Types.Floating
             backgroundHints: PlasmaCore.Dialog.StandardBackground
             visible: searchBar.visible && searchBar.parent.typing
-            // If the window system gives the results the keyboard anyway, hand
-            // it straight back to the box, so the typing goes on there.
+            // The results never take the keyboard (Plasma gives this kind of
+            // window no focus). If some window system did, hand it back.
             onActiveChanged: if (active) {
                 searchBar.Window.window.requestActivate();
                 field.forceActiveFocus();

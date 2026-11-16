@@ -227,6 +227,9 @@ QtObject {
     }
     // The start widget whose search (apps, files, actions) and launcher the
     // taskbar's search box uses: the one on the same monitor if there is one.
+    // A taskbar search box started typing: the others (other monitors) stop.
+    signal searchStarted(var box)
+
     function searchOwner(screen) {
         let pick = null;
         for (const o of owners) {

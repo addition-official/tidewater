@@ -432,7 +432,9 @@ PlasmoidItem {
         Layout.maximumHeight: 700
         Connections {
             target: root
-            function onExpandedChanged() { if (root.expanded) startMenu.reset(); }
+            // fresh each time it opens; and cleared as it closes, so it never
+            // opens showing (and sized for) the last search
+            function onExpandedChanged() { startMenu.reset(); }
         }
     }
 }
