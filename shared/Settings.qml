@@ -14,8 +14,10 @@
 // offerLegacy); everything else stays at the defaults below.
 //
 // Every default reproduces Tidewater's look from before these options existed,
-// except showAllDesktops (each desktop now shows only its own windows) and
-// showDesktopCorner (the "show desktop" strip is new, and off unless chosen).
+// except showAllDesktops (each desktop now shows only its own windows),
+// showDesktopCorner (the "show desktop" strip is new, and off unless chosen),
+// and workspaces and showDividers: like Windows, no desktop pills and no
+// dividers unless chosen. (Settings saved before keep what they had.)
 pragma Singleton
 import QtQuick
 
@@ -28,8 +30,8 @@ QtObject {
     property string startIcon: ""
     property string searchStyle: "full"      // full (icon and "Search"), icon, hidden
     property bool showOverview: true
-    property string workspaces: "numbers"    // numbers, dots, hidden
-    property bool showDividers: true
+    property string workspaces: "hidden"     // numbers, dots, hidden
+    property bool showDividers: false
     property bool showPower: true
     property bool showDesktopCorner: false   // thin "show desktop" strip at the far right
     property bool showBell: false            // separate notification bell (they are in the clock)
@@ -58,8 +60,8 @@ QtObject {
             startIcon: "",
             searchStyle: "full",
             showOverview: true,
-            workspaces: "numbers",
-            showDividers: true,
+            workspaces: "hidden",
+            showDividers: false,
             showPower: true,
             showDesktopCorner: false,
             showBell: false,

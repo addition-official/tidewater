@@ -15,8 +15,8 @@
     <entry name="searchStyle" type="String"><default>full</default></entry>
     <entry name="showOverview" type="Bool"><default>true</default></entry>
     <!-- numbers, dots or hidden -->
-    <entry name="workspaces" type="String"><default>numbers</default></entry>
-    <entry name="showDividers" type="Bool"><default>true</default></entry>
+    <entry name="workspaces" type="String"><default>hidden</default></entry>
+    <entry name="showDividers" type="Bool"><default>false</default></entry>
     <entry name="showPower" type="Bool"><default>true</default></entry>
     <!-- thin "show desktop" strip at the far right of the panel -->
     <entry name="showDesktopCorner" type="Bool"><default>false</default></entry>

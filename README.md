@@ -113,11 +113,12 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   - start button: Tidewater's own icon, one from your icon theme, or your own
     picture (SVG, PNG, JPEG, WebP)
   - Search: icon and "Search", icon only, or hidden
-  - overview button, dividers, power button: shown or hidden
+  - overview button (like Windows' Task View), dividers (off by default),
+    power button: shown or hidden
   - show desktop corner: a thin strip at the far right that shows the
     desktop (off by default)
   - start menu: what's playing and its own power button, shown or hidden
-  - desktops: numbered pills, dots, or hidden
+  - desktops: numbered pills, dots, or hidden (the default, like Windows)
   - taskbar: icons centered or on the left, icon size, fill the bar, and
     whether each desktop shows only its own apps (the default) or every
     desktop's apps

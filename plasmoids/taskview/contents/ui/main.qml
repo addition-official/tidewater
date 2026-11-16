@@ -47,6 +47,7 @@ PlasmoidItem {
             anchors.centerIn: parent
             pal: design
             glyph: "grid_view"
+            svg: "taskview"   // like Windows' Task View button (common/Glyph.qml)
             fallback: "view-grid-symbolic"
             onClicked: exec.run("busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s Overview")
         }
