@@ -151,10 +151,12 @@ PlasmoidItem {
     fullRepresentation: Item {
         id: cal
         FloatingPopup {}
-        Layout.preferredWidth: 320
-        Layout.minimumWidth: 320
-        Layout.preferredHeight: col.implicitHeight + 32
+        Layout.preferredWidth: 340
+        Layout.minimumWidth: 340
+        Layout.maximumWidth: 340
+        Layout.preferredHeight: col.implicitHeight + 20
         Layout.minimumHeight: Layout.preferredHeight
+        Layout.maximumHeight: Layout.preferredHeight
 
         // The calendar is one long list of weeks rather than a page per month.
         // Days are counted as whole days since 1 January 1970 ("day numbers"),
@@ -162,7 +164,7 @@ PlasmoidItem {
         // of the list is the week the calendar was opened in; each row works
         // out its own dates from its position, so nothing big is ever built.
         readonly property int middle: 5200          // about 100 years each way
-        readonly property int rowHeight: 37         // 6 rows = the old month grid's height
+        readonly property int rowHeight: 42         // one week
         readonly property int rowsShown: 6
         function dayNumber(d) {
             return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
@@ -220,15 +222,12 @@ PlasmoidItem {
             const first = dayNumber(new Date(Math.floor(m / 12), m % 12, 1));
             scrollTo(rowOf(first), true);
         }
-        // Today's week second from the top, unless that would put the next
-        // (or previous) month in the header: then move it a row or two.
+        // On opening (and "Go to today"): the whole current month, starting
+        // with the week of its 1st, like a month page. A month spans at most
+        // six weeks, so today is always in view.
         function todayTop() {
-            const want = monthOf(todayNumber);
-            for (const r of [1, 0, 2, 3, 4]) {
-                if (monthAtTop(todayRow - r) === want)
-                    return todayRow - r;
-            }
-            return todayRow - 1;
+            const now = root.now;
+            return rowOf(dayNumber(new Date(now.getFullYear(), now.getMonth(), 1)));
         }
         // On first opening the list has no height yet and can't be scrolled:
         // then it is done as soon as the list gets its height.
@@ -262,31 +261,67 @@ PlasmoidItem {
             }
         }
 
+        // a small square icon button, framed only while hovered
+        component NavButton: Rectangle {
+            id: nb
+            property string glyph
+            property string fallback
+            property string tip
+            signal clicked()
+            implicitWidth: 32
+            implicitHeight: 32
+            radius: 6
+            color: nbArea.containsMouse ? design.tintHover : "transparent"
+            Glyph {
+                anchors.centerIn: parent
+                name: nb.glyph; fallback: nb.fallback
+                size: 20; wght: 300
+                color: design.text1
+                fontAvailable: design.hasIconFont
+            }
+            MouseArea {
+                id: nbArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: nb.clicked()
+            }
+            QQC2.ToolTip.visible: nbArea.containsMouse && nb.tip !== ""
+            QQC2.ToolTip.text: nb.tip
+            QQC2.ToolTip.delay: 500
+        }
+
         ColumnLayout {
             id: col
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            spacing: 0
 
-            ColumnLayout {
-                spacing: 0
-                Text {
-                    text: Qt.formatDate(root.now, "dddd")
-                    font.family: design.font
-                    font.pixelSize: 13
-                    color: design.mut
-                }
-                Text {
-                    text: Qt.formatDate(root.now, root.longDateFormat)
-                    font.family: design.font
-                    font.pixelSize: 20
-                    font.weight: Font.Medium
-                    color: design.fg
-                }
+            // Today, like "Sunday, November 15" (day and month in the order of
+            // the panel's date format; no year)
+            Text {
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                Layout.topMargin: 16
+                Layout.bottomMargin: 14
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: Qt.formatDate(root.now, "dddd") + ", "
+                    + Qt.formatDate(root.now, root.longDateFormat.replace(/,?\s*yyyy/, "").trim())
+                font.family: design.font
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+                color: design.text1
             }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: design.divider }
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 14
+                Layout.topMargin: 12
+                Layout.bottomMargin: 6
                 Item {
                     Layout.fillWidth: true
                     implicitHeight: monthName.implicitHeight
@@ -295,41 +330,36 @@ PlasmoidItem {
                         text: Qt.locale().standaloneMonthName(cal.shownMonth % 12) + " " + Math.floor(cal.shownMonth / 12)
                         font.family: design.font
                         font.pixelSize: 14
-                        font.weight: Font.Medium
-                        color: design.fg
+                        font.weight: Font.DemiBold
+                        color: design.text1
                         // Click the month to go back to today.
                         MouseArea {
+                            id: monthArea
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: cal.scrollTo(cal.todayTop(), true)
                         }
+                        QQC2.ToolTip.visible: monthArea.containsMouse
+                        QQC2.ToolTip.text: "Go to today"
+                        QQC2.ToolTip.delay: 500
                     }
                 }
-                BarButton {
-                    pal: design
-                    size: 30
-                    glyph: "today"
-                    fallback: "go-jump-today"
-                    onClicked: cal.scrollTo(cal.todayTop(), true)
-                }
-                BarButton {
-                    pal: design
-                    size: 30
-                    glyph: "chevron_left"
-                    fallback: "go-previous-symbolic"
+                // up and down, as the weeks scroll up and down
+                NavButton {
+                    glyph: "keyboard_arrow_up"; fallback: "go-up-symbolic"; tip: "Previous month"
                     onClicked: cal.shift(-1)
                 }
-                BarButton {
-                    pal: design
-                    size: 30
-                    glyph: "chevron_right"
-                    fallback: "go-next-symbolic"
+                NavButton {
+                    glyph: "keyboard_arrow_down"; fallback: "go-down-symbolic"; tip: "Next month"
                     onClicked: cal.shift(1)
                 }
             }
 
             QQC2.DayOfWeekRow {
                 Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
                 locale: Qt.locale()
                 // no style gaps: each name must sit over its column of days
                 spacing: 0
@@ -337,11 +367,15 @@ PlasmoidItem {
                 rightPadding: 0
                 delegate: Text {
                     required property string shortName
-                    text: shortName
+                    // "Su Mo Tu" in English, like Windows; other languages keep
+                    // their own short names
+                    text: Qt.locale().name.startsWith("en") ? shortName.substring(0, 2) : shortName
                     horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    height: 30
                     font.family: design.font
-                    font.pixelSize: 11
-                    color: design.mut
+                    font.pixelSize: 12
+                    color: design.text2
                 }
             }
 
@@ -349,6 +383,8 @@ PlasmoidItem {
                 id: weeks
                 objectName: "calendarWeeks"
                 Layout.fillWidth: true
+                Layout.leftMargin: 14
+                Layout.rightMargin: 14
                 Layout.preferredHeight: cal.rowsShown * cal.rowHeight
                 clip: true
                 model: cal.lastTop + cal.rowsShown
@@ -387,33 +423,24 @@ PlasmoidItem {
                             height: cal.rowHeight
                             Rectangle {
                                 anchors.centerIn: parent
-                                width: 30
-                                height: 30
-                                radius: 10
-                                color: day.today ? design.acc : "transparent"
+                                width: 36
+                                height: 36
+                                radius: 18
+                                color: day.today ? design.blue : dayArea.containsMouse ? design.tintHover : "transparent"
                             }
                             Text {
                                 anchors.centerIn: parent
-                                anchors.verticalCenterOffset: day.day === 1 ? -5 : 0
                                 text: day.day
                                 font.family: design.font
                                 font.pixelSize: 13
-                                font.weight: day.today ? Font.Medium : Font.Normal
-                                color: day.today ? design.accFg : design.fg
-                                opacity: day.inMonth || day.today ? 1 : 0.35
+                                font.weight: day.today ? Font.DemiBold : Font.Normal
+                                color: day.today ? design.blueText : day.inMonth ? design.text1 : design.text3
                             }
-                            // the 1st of each month also names its month, so
-                            // the change from one month to the next stands out
-                            Text {
-                                visible: day.day === 1
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.verticalCenterOffset: 8
-                                text: visible ? Qt.locale().standaloneMonthName(day.date.getUTCMonth(), Locale.ShortFormat) : ""
-                                font.family: design.font
-                                font.pixelSize: 9
-                                color: day.today ? design.accFg : design.mut
-                                opacity: day.inMonth || day.today ? 1 : 0.35
+                            MouseArea {
+                                id: dayArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
                             }
                         }
                     }
