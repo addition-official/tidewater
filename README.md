@@ -102,8 +102,9 @@ asks you to type `delete` first. With the backups gone, this can't be undone.
   slider and scrolling don't show it. Plasma's own volume popup is off while
   it is on
 - **Notifications**, like Windows 11: click the clock to see them above the
-  calendar, with Do not disturb and Clear all; the unread count shows beside
-  the clock. A separate bell button can be turned on in the settings
+  calendar, with Do not disturb and Clear all. A bell beside the clock fills
+  in when there are new ones. A separate bell button can be turned on in the
+  settings
 - **Alt+Tab** in the Windows 11 style: centered rows of window cards sized to
   each window; hover for X, Delete closes the selected one
 - **Settings:** one page for the whole panel, on every monitor. Right-click

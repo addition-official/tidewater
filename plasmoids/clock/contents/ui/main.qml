@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
 // Clock: time over date ("20:35 / Tue 15 Sep"), a soft pill on hover, and,
-// like Windows 11, the unread notification count beside it. Clicked, it opens
-// the notifications above a month calendar.
+// like Windows 11, a notification bell beside it (filled when there are new
+// ones). Clicked, it opens the notifications above a month calendar.
 // Its options (seconds, 12/24-hour, the date line) are Tidewater's settings.
 import QtQuick
 import QtQuick.Layouts
@@ -81,6 +81,9 @@ PlasmoidItem {
     readonly property string timeFormat: Settings.showSeconds && root.systemFormat.indexOf("ss") < 0 ? root.systemFormat.replace("mm", "mm:ss") : root.systemFormat
 
     toolTipMainText: Qt.formatDate(now, Qt.locale().dateFormat(Locale.LongFormat))
+    toolTipSubText: notifs.quiet ? "Do not disturb is on"
+        : notifs.unseen === 1 ? "1 new notification"
+        : notifs.unseen > 1 ? notifs.unseen + " new notifications" : ""
 
     // The big date in the calendar ("November 8, 2026" or "8 November 2026"):
     // day and month in the same order as the panel's date format, so a
@@ -123,7 +126,7 @@ PlasmoidItem {
             id: face
             anchors.centerIn: parent
             width: Math.max(time.implicitWidth, date.visible ? date.implicitWidth : 0) + Math.round(24 * root.k)
-                   + (badge.visible ? badge.width + Math.round(8 * root.k) : 0)
+                   + badge.width + Math.round(8 * root.k)
             height: design.thickness - 8
             radius: Math.round(13 * root.k)
             color: area.containsMouse || root.expanded ? design.s2 : "transparent"
@@ -161,37 +164,21 @@ PlasmoidItem {
                 }
             }
 
-            // Unread notifications, beside the time like Windows 11 (a crossed
-            // out bell while Do not disturb is on).
-            Rectangle {
+            // The notification bell beside the time, like Windows 11: an
+            // outline while there is nothing new, filled in the accent color
+            // when there are new notifications, a bell with "zZ" while Do not
+            // disturb is on.
+            Glyph {
                 id: badge
-                visible: notifs.quiet || notifs.unseen > 0
                 anchors.left: clockText.right
                 anchors.leftMargin: Math.round(8 * root.k)
                 anchors.verticalCenter: parent.verticalCenter
-                height: 18
-                width: notifs.quiet ? 18 : Math.max(18, badgeText.implicitWidth + 10)
-                radius: 9
-                color: notifs.quiet ? "transparent" : "#e0393e"    // red, like the taskbar's badges
-                Text {
-                    id: badgeText
-                    visible: !notifs.quiet
-                    anchors.centerIn: parent
-                    text: notifs.unseen > 99 ? "99+" : String(notifs.unseen)
-                    font.family: design.font
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: "white"
-                }
-                Glyph {
-                    visible: notifs.quiet
-                    anchors.centerIn: parent
-                    name: "notifications_off"; fallback: "notifications-disabled"
-                    svg: "snooze"
-                    size: 16
-                    color: design.fg
-                    fontAvailable: design.hasIconFont
-                }
+                name: "notifications"; fallback: "notifications"
+                svg: notifs.quiet ? "snooze" : ""
+                filled: notifs.unseen > 0 && !notifs.quiet
+                size: 16
+                color: notifs.unseen > 0 && !notifs.quiet ? design.blue : design.fg
+                fontAvailable: design.hasIconFont
             }
 
             MouseArea {
