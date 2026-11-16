@@ -39,6 +39,11 @@ Item {
         // Do not disturb: a bell with "zZ" (the user's own design, drawn on
         // a 20 unit grid and filled, so it is scaled up to 24 and drawn in
         // the ink color instead of stroked).
+        // Search: a magnifier with its handle to the lower left, like the
+        // Windows one (the user's own design, on a 240 unit grid).
+        "search": '<g transform="scale(0.1) translate(-44 -53.5)" stroke="INK" fill="none" stroke-linecap="round">'
+            + '<circle cx="177.4" cy="154.6" r="81.4" stroke-width="22.7"/>'
+            + '<path d="M119.3 220.8L71.8 269.5" stroke-width="28.5"/></g>',
         // The plain bell to go with it: the same shape, line and grid, without
         // the "zZ" (an outline; filled when there are new notifications).
         "bell": '<g transform="scale(1.2)" stroke="INK" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path fill="none" d="M9.75 16.08H2.75Q1.55 16.08 2.25 15.05L3.8 12.95V7.2C3.8 3.9 6.45 1.75 9.75 1.75C13.05 1.75 15.7 3.9 15.7 7.2V12.95L17.25 15.05Q17.95 16.08 16.75 16.08Z"/><path fill="none" d="M7.3 16.95C7.85 18.35 8.7 18.95 9.75 18.95C10.8 18.95 11.65 18.35 12.2 16.95"/></g>',

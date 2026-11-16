@@ -218,9 +218,18 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: "Search button:"
             text: "Icon and \"Search\""
             QQC2.ButtonGroup.group: searchGroup
-            checked: cfg_searchStyle !== "icon" && cfg_searchStyle !== "hidden"
+            checked: cfg_searchStyle !== "bar" && cfg_searchStyle !== "icon" && cfg_searchStyle !== "hidden"
             onToggled: if (checked) {
                 cfg_searchStyle = "full";
+                page.touch();
+            }
+        }
+        QQC2.RadioButton {
+            text: "Search bar (like Windows)"
+            QQC2.ButtonGroup.group: searchGroup
+            checked: cfg_searchStyle === "bar"
+            onToggled: if (checked) {
+                cfg_searchStyle = "bar";
                 page.touch();
             }
         }

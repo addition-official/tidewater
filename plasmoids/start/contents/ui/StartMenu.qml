@@ -410,6 +410,7 @@ Item {
             x: 14
             anchors.verticalCenter: parent.verticalCenter
             name: "search"; fallback: "search"
+            svg: "search"   // the user's own magnifier (common/Glyph.qml)
             size: 18; wght: 300
             color: sm.pal.text2
             fontAvailable: sm.pal.hasIconFont

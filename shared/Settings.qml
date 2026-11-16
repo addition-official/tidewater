@@ -28,7 +28,7 @@ QtObject {
     // Start button: "" = the built-in glyph; otherwise an icon theme name, or
     // the full path (or file:// address) of an image file.
     property string startIcon: ""
-    property string searchStyle: "full"      // full (icon and "Search"), icon, hidden
+    property string searchStyle: "full"      // full (icon and "Search"), bar (a search box, like Windows), icon, hidden
     property bool showOverview: true
     property string workspaces: "hidden"     // numbers, dots, hidden
     property bool showDividers: false
@@ -98,7 +98,7 @@ QtObject {
         }
         const t = String(v);
         if (key === "searchStyle")
-            return ["full", "icon", "hidden"].indexOf(t) >= 0 ? t : d;
+            return ["full", "bar", "icon", "hidden"].indexOf(t) >= 0 ? t : d;
         if (key === "workspaces")
             return ["numbers", "dots", "hidden"].indexOf(t) >= 0 ? t : d;
         if (key === "alignment")
