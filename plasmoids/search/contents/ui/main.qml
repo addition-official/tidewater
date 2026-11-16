@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// Search pill -- part of Tidewater.
+// Search: a pill or icon that opens the start menu ready to type, or a
+// search box like Windows' that you type into right on the taskbar, with the
+// results in a panel above it -- part of Tidewater.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls as QQC2
+import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import "common"
@@ -66,7 +70,38 @@ PlasmoidItem {
             onClicked: parent.open()
         }
 
-        // "bar": a search box like the one on the Windows taskbar
+        // ---- "bar": a search box you type into, like the one on Windows ----------
+        // While you type, the panel takes keyboard input (Plasma's "accepting
+        // input" status) and the results show in a panel above the box. That
+        // panel never takes the keyboard, so the typing stays in the box. The
+        // search itself (apps, files, actions) and opening a result are the
+        // start widget's, the same as in the start menu.
+        readonly property var owner: Settings.searchOwner(Plasmoid.containment ? Plasmoid.containment.screen : -1)
+        property string query: ""
+        property int selected: 0
+        property bool typing: false      // between startTyping() and stopTyping()
+        // at most ten, so the panel always fits above the taskbar
+        readonly property var results: owner && query.trim().length > 0 ? owner.search(query, owner.fileResults).slice(0, 10) : []
+        function startTyping() {
+            typing = true;
+            Plasmoid.status = PlasmaCore.Types.AcceptingInputStatus;
+            field.forceActiveFocus();
+            Qt.callLater(() => field.forceActiveFocus());   // after the panel takes the keyboard
+        }
+        function stopTyping() {
+            typing = false;
+            field.text = "";
+            field.focus = false;
+            Plasmoid.status = PlasmaCore.Types.PassiveStatus;
+        }
+        function activate(item) {
+            if (!item || !owner) return;
+            if (item.kind === "app") owner.launch(item.id);
+            else if (item.kind === "file") owner.openUrl(item.url);
+            else if (item.kind === "action") owner.session(item.id);
+            stopTyping();
+        }
+
         Rectangle {
             id: searchBar
             visible: parent.shown && parent.bar
@@ -74,10 +109,11 @@ PlasmoidItem {
             width: Math.round(220 * design.unit)
             height: Math.max(22, Math.round(44 * design.unit))
             radius: height / 2
-            color: design.dark ? Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.11 : 0.07)
+            color: field.activeFocus ? (design.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(1, 1, 1, 1))
+                 : design.dark ? Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.11 : 0.07)
                                : Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.95 : 0.75)
             border.width: 1
-            border.color: design.stroke
+            border.color: field.activeFocus ? design.blue : design.stroke
             Behavior on color { ColorAnimation { duration: 120 } }
             Glyph {
                 id: lens
@@ -88,21 +124,192 @@ PlasmoidItem {
                 color: design.fg
                 fontAvailable: design.hasIconFont
             }
-            Text {
+            QQC2.TextField {
+                id: field
                 anchors.left: lens.right
-                anchors.leftMargin: Math.round(10 * design.unit)
+                anchors.leftMargin: Math.round(6 * design.unit)
+                anchors.right: parent.right
+                anchors.rightMargin: Math.round(searchBar.height * 0.4)
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Search"
+                background: null
+                color: design.text1
+                selectionColor: design.blue
+                selectedTextColor: design.blueText
                 font.family: design.font
                 font.pixelSize: Math.max(12, Math.round(14 * Math.min(1, Math.max(0.85, design.unit))))
-                color: design.mut
+                placeholderText: "Search"
+                placeholderTextColor: design.mut
+                onTextChanged: {
+                    const box = searchBar.parent;
+                    box.query = text;
+                    box.selected = 0;
+                    if (box.owner) box.owner.searchFiles(text);
+                }
+                // Lost the keyboard: clicked somewhere else, so stop typing. Not
+                // when the results panel got it (handed back, see below).
+                onActiveFocusChanged: if (!activeFocus) Qt.callLater(() => {
+                    if (!field.activeFocus && !resultsPopup.active && searchBar.parent.typing)
+                        searchBar.parent.stopTyping();
+                })
+                Keys.onDownPressed: searchBar.parent.selected = Math.max(0, Math.min(searchBar.parent.results.length - 1, searchBar.parent.selected + 1))
+                Keys.onUpPressed: searchBar.parent.selected = Math.max(0, searchBar.parent.selected - 1)
+                Keys.onReturnPressed: searchBar.parent.activate(searchBar.parent.results[searchBar.parent.selected])
+                Keys.onEnterPressed: searchBar.parent.activate(searchBar.parent.results[searchBar.parent.selected])
+                Keys.onEscapePressed: searchBar.parent.stopTyping()
             }
+            // Until you are typing, a click anywhere on the box (above the text
+            // field) starts typing: the panel has to be asked for the keyboard.
             MouseArea {
                 id: barArea
                 anchors.fill: parent
+                enabled: !field.activeFocus
                 hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: parent.parent.open()
+                cursorShape: Qt.IBeamCursor
+                onClicked: {
+                    if (searchBar.parent.owner) searchBar.parent.startTyping();
+                    else searchBar.parent.open();     // no start button: KRunner
+                }
+            }
+        }
+
+        // ---- the results, above the box ----
+        PlasmaCore.Dialog {
+            id: resultsPopup
+            // the same kind of window as the taskbar's preview card: it takes
+            // clicks but not the keyboard
+            type: PlasmaCore.Dialog.Tooltip
+            flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
+            location: PlasmaCore.Types.Floating
+            backgroundHints: PlasmaCore.Dialog.StandardBackground
+            visible: searchBar.visible && searchBar.parent.typing && searchBar.parent.query.trim().length > 0
+            // If the window system gives the results the keyboard anyway, hand
+            // it straight back to the box, so the typing goes on there.
+            onActiveChanged: if (active) {
+                searchBar.Window.window.requestActivate();
+                field.forceActiveFocus();
+            }
+            onVisibleChanged: if (visible) Qt.callLater(place)
+            onWidthChanged: if (visible) place()
+            onHeightChanged: if (visible) place()
+            // above the box, its left edge lined up with the box, kept on the
+            // panel's monitor
+            function place() {
+                const g = Plasmoid.containment.screenGeometry;
+                const p = searchBar.mapToGlobal(0, 0);
+                const w = list.width + (margins ? margins.left + margins.right : 0);
+                const h = list.height + (margins ? margins.top + margins.bottom : 0);
+                x = Math.max(g.x + 8, Math.min(g.x + g.width - w - 8, Math.round(p.x)));
+                y = Math.max(g.y + 8, Math.round(p.y - h - 10));
+            }
+
+            mainItem: Item {
+                width: list.width
+                height: list.height
+                Column {
+                    id: list
+                    width: 520
+                    padding: 8
+                    readonly property var box: searchBar.parent
+                    Repeater {
+                        model: list.box.results
+                        Column {
+                            id: entry
+                            required property var modelData
+                            required property int index
+                            width: list.width - 16
+                            readonly property bool firstOfKind: index === 0 || list.box.results[index - 1].kind !== modelData.kind
+                            Text {
+                                visible: entry.firstOfKind
+                                leftPadding: 8
+                                height: 28
+                                verticalAlignment: Text.AlignVCenter
+                                text: entry.modelData.kind === "app" ? "Apps" : entry.modelData.kind === "file" ? "Files" : "Actions"
+                                font.family: design.font
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                color: design.text2
+                            }
+                            Rectangle {
+                                id: row
+                                readonly property bool isSelected: entry.index === list.box.selected
+                                width: parent.width
+                                height: entry.modelData.kind === "action" ? 40 : 48
+                                radius: 6
+                                color: isSelected || rowArea.containsMouse ? design.tintHover : "transparent"
+                                Rectangle {
+                                    visible: row.isSelected
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 3; height: 16; radius: 1.5
+                                    color: design.blue
+                                }
+                                Item {
+                                    id: rowIcon
+                                    x: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 26; height: 26
+                                    Kirigami.Icon {
+                                        anchors.fill: parent
+                                        visible: entry.modelData.kind !== "action"
+                                        source: entry.modelData.icon || (entry.modelData.kind === "app" ? "application-x-executable" : "text-x-generic")
+                                        fallback: entry.modelData.kind === "app" ? "application-x-executable" : "text-x-generic"
+                                    }
+                                    Glyph {
+                                        anchors.centerIn: parent
+                                        visible: entry.modelData.kind === "action"
+                                        name: entry.modelData.glyph || ""
+                                        size: 20; wght: 300
+                                        color: design.text1
+                                        fontAvailable: design.hasIconFont
+                                    }
+                                }
+                                Column {
+                                    anchors.left: rowIcon.right
+                                    anchors.leftMargin: 12
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Text {
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        text: entry.modelData.name
+                                        textFormat: Text.PlainText   // app/file names: never render as HTML
+                                        font.family: design.font
+                                        font.pixelSize: 13
+                                        color: design.text1
+                                    }
+                                    Text {
+                                        visible: entry.modelData.kind !== "action" && text.length > 0
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                        text: entry.modelData.description || ""
+                                        textFormat: Text.PlainText
+                                        font.family: design.font
+                                        font.pixelSize: 12
+                                        color: design.text2
+                                    }
+                                }
+                                MouseArea {
+                                    id: rowArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onEntered: list.box.selected = entry.index
+                                    onClicked: list.box.activate(entry.modelData)
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        visible: list.box.results.length === 0
+                        leftPadding: 8
+                        height: 36
+                        verticalAlignment: Text.AlignVCenter
+                        text: "No matches"
+                        font.family: design.font
+                        font.pixelSize: 13
+                        color: design.text2
+                    }
+                }
             }
         }
     }

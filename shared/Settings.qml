@@ -219,18 +219,22 @@ QtObject {
     // like Windows: the start button on the same monitor if there is one, else
     // any start button on screen. False when there is no start button.
     function openStartSearch(screen) {
-        let pick = null;
-        for (const o of owners) {
-            if (o.screenIndex === screen && o.onScreen && o.onScreen()) {
-                pick = o;
-                break;
-            }
-            if (!pick || (o.onScreen && o.onScreen()))
-                pick = o;
-        }
+        const pick = searchOwner(screen);
         if (!pick)
             return false;
         pick.openSearch();
         return true;
+    }
+    // The start widget whose search (apps, files, actions) and launcher the
+    // taskbar's search box uses: the one on the same monitor if there is one.
+    function searchOwner(screen) {
+        let pick = null;
+        for (const o of owners) {
+            if (o.screenIndex === screen && o.onScreen && o.onScreen())
+                return o;
+            if (!pick || (o.onScreen && o.onScreen()))
+                pick = o;
+        }
+        return pick;
     }
 }
