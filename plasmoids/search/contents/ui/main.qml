@@ -39,6 +39,11 @@ PlasmoidItem {
     Palette { id: design }
     Exec { id: exec }
     fullRepresentation: Item {}
+    // The search box never opens as a Plasma popup: Plasma would mark it with
+    // its "open" line (in the highlight color) along the top of the panel.
+    // A key press on the widget (Space, Enter) can ask for that; refuse it.
+    activationTogglesExpanded: false
+    onExpandedChanged: if (expanded) expanded = false
     // no tooltip on the search box, like Windows (it would also sit over the
     // results while you type); the plain button keeps "Search"
     toolTipMainText: Settings.searchStyle === "bar" ? "" : "Search"
@@ -102,6 +107,10 @@ PlasmoidItem {
             tab = "all";
             field.text = "";
             field.focus = false;
+            // and nothing of this widget keeps the keyboard (Plasma marks a
+            // panel widget that has it until another window is clicked)
+            const win = searchBar.Window.window;
+            if (win && win.contentItem) win.contentItem.forceActiveFocus();
             Plasmoid.status = PlasmaCore.Types.PassiveStatus;
         }
         function activate(item) {
