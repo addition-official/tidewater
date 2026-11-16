@@ -174,8 +174,8 @@ PlasmoidItem {
                 anchors.leftMargin: Math.round(8 * root.k)
                 anchors.verticalCenter: parent.verticalCenter
                 name: "notifications"; fallback: "notifications"
-                svg: notifs.quiet ? "snooze" : ""
-                filled: notifs.unseen > 0 && !notifs.quiet
+                // the user's bell, and the matching plain one (common/Glyph.qml)
+                svg: notifs.quiet ? "snooze" : notifs.unseen > 0 ? "bell_filled" : "bell"
                 size: 16
                 color: notifs.unseen > 0 && !notifs.quiet ? design.blue : design.fg
                 fontAvailable: design.hasIconFont
