@@ -4,9 +4,9 @@
 // search on top; pinned apps and recommended (recent) files; a slim
 // now-playing strip while something plays; your name and the power button
 // at the bottom. "All apps" lists every app A to Z, with filters for the
-// app categories; "More" lists every recent file. Typing shows the same
-// search panel as the taskbar's box (common/SearchPanel.qml); with a search
-// box on the taskbar, the typing moves there instead.
+// app categories; "More" lists every recent file. Typing turns it into
+// the same search panel as the taskbar's box (common/SearchPanel.qml), with
+// this box on top, like Windows.
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
@@ -400,19 +400,11 @@ Item {
         width: parent.width - 2 * sm.pad
         height: 38
         radius: height / 2
-        color: search.activeFocus ? sm.pal.alpha(sm.pal.dark ? "black" : "white", 0.2) : sm.pal.tint
+        // typing, like Windows: darker, a grey outline and a blue magnifier
+        // (no blue line)
+        color: search.activeFocus && sm.searching ? sm.pal.alpha(sm.pal.dark ? "black" : "white", 0.25) : sm.pal.tint
         border.width: 1
-        border.color: sm.pal.stroke
-        // the focus line along the bottom
-        Rectangle {
-            visible: search.activeFocus
-            anchors.bottom: parent.bottom
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width - 2 * parent.radius
-            height: 2
-            radius: 1
-            color: sm.pal.blue
-        }
+        border.color: search.activeFocus && sm.searching ? sm.pal.alpha(sm.pal.text1, 0.25) : sm.pal.stroke
         Glyph {
             id: lens
             x: 14
@@ -420,7 +412,7 @@ Item {
             name: "search"; fallback: "search"
             svg: "search"   // the user's own magnifier (common/Glyph.qml)
             size: 18; wght: 300
-            color: sm.pal.text2
+            color: sm.searching ? sm.pal.blue : sm.pal.text2
             fontAvailable: sm.pal.hasIconFont
         }
         QQC2.TextField {
@@ -441,11 +433,6 @@ Item {
             leftPadding: 2
             placeholderText: ""
             onTextChanged: {
-                // a search box on the taskbar: the typing goes on there
-                if (text.trim().length > 0 && sm.app.handToBar(text)) {
-                    text = "";
-                    return;
-                }
                 sm.query = text;
                 sm.selected = 0;
                 sm.app.searchFiles(text);
@@ -476,7 +463,8 @@ Item {
         x: sm.pad - 8
         y: searchBox.y + searchBox.height + 22
         width: parent.width - 2 * (sm.pad - 8)
-        height: footer.y - y - 12
+        // searching: the panel takes the whole menu, no bottom bar (like Windows)
+        height: (sm.searching ? parent.height : footer.y - 12) - y
 
         // ---- searching: the same panel as the taskbar's search box ----
         SearchPanel {
@@ -796,6 +784,7 @@ Item {
 
     Item {
         id: footer
+        visible: !sm.searching
         anchors.bottom: parent.bottom
         width: parent.width
         height: 60

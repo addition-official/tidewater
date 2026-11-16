@@ -89,15 +89,6 @@ PlasmoidItem {
         property string tab: "all"       // the panel's filter: all, apps, documents, folders, settings
         onTabChanged: selected = 0
         readonly property var results: owner && query.trim().length > 0 ? owner.searchIn(query, tab) : []
-        // the start menu hands over what was typed there (Settings.typeInBar)
-        readonly property int screenIndex: Plasmoid.containment ? Plasmoid.containment.screen : -1
-        function typeFromStart(text) {
-            startTyping();
-            field.text = text;
-            field.cursorPosition = text.length;
-        }
-        Component.onCompleted: Settings.addBar(this)
-        Component.onDestruction: Settings.removeBar(this)
         function startTyping() {
             typing = true;
             Plasmoid.status = PlasmaCore.Types.AcceptingInputStatus;
@@ -126,11 +117,13 @@ PlasmoidItem {
             width: Math.round(220 * design.unit)
             height: Math.max(22, Math.round(44 * design.unit))
             radius: height / 2
-            color: field.activeFocus ? (design.dark ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(1, 1, 1, 1))
+            // typing, like Windows: darker, a grey outline and a blue
+            // magnifier (no blue outline)
+            color: field.activeFocus ? (design.dark ? Qt.rgba(0, 0, 0, 0.3) : Qt.rgba(1, 1, 1, 1))
                  : design.dark ? Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.11 : 0.07)
                                : Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.95 : 0.75)
             border.width: 1
-            border.color: field.activeFocus ? design.blue : design.stroke
+            border.color: field.activeFocus ? design.alpha(design.fg, 0.28) : design.stroke
             Behavior on color { ColorAnimation { duration: 120 } }
             Glyph {
                 id: lens
@@ -138,7 +131,7 @@ PlasmoidItem {
                 anchors.verticalCenter: parent.verticalCenter
                 name: "search"; svg: "search"; fallback: "search"
                 size: Math.max(14, Math.round(18 * design.unit))
-                color: design.fg
+                color: searchBar.parent.typing ? design.blue : design.fg
                 fontAvailable: design.hasIconFont
             }
             QQC2.TextField {

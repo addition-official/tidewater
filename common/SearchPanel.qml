@@ -40,6 +40,14 @@ Item {
         if (item.kind === "file") return item.folder ? "Folders" : "Documents";
         return "Actions";
     }
+    // the tab that shows only this kind of result
+    function tabFor(item) {
+        if (!item) return "";
+        if (item.kind === "app") return "apps";
+        if (item.kind === "setting") return "settings";
+        if (item.kind === "file") return item.folder ? "folders" : "documents";
+        return "";
+    }
     function typeLabel(item) {
         if (!item) return "";
         if (item.kind === "app") return "App";
@@ -70,6 +78,51 @@ Item {
         elide: Text.ElideRight
         textFormat: Text.PlainText   // app/file names: never render as HTML
     }
+    component DetailButton: Rectangle {
+        id: btn
+        property string text
+        property bool chevron: false
+        property bool open: false
+        signal clicked()
+        height: 36
+        radius: 6
+        color: btnArea.pressed ? panel.pal.tint : btnArea.containsMouse ? panel.pal.tintHover : panel.pal.tint
+        border.width: 1
+        border.color: panel.pal.stroke
+        Row {
+            anchors.centerIn: parent
+            spacing: 8
+            Label { anchors.verticalCenter: parent.verticalCenter; text: btn.text }
+            Glyph {
+                visible: btn.chevron
+                anchors.verticalCenter: parent.verticalCenter
+                name: btn.open ? "expand_less" : "expand_more"; fallback: btn.open ? "go-up" : "go-down"
+                size: 18; wght: 300
+                color: panel.pal.text1
+                fontAvailable: panel.pal.hasIconFont
+            }
+        }
+        MouseArea {
+            id: btnArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: btn.clicked()
+        }
+    }
+    // an icon on a small rounded tile, like the Windows search results
+    component IconTile: Rectangle {
+        property var item
+        radius: 6
+        color: panel.pal.tint
+        border.width: 1
+        border.color: panel.pal.stroke
+        ItemIcon {
+            anchors.centerIn: parent
+            width: Math.round(parent.width * 0.6); height: width
+            item: parent.item
+        }
+    }
     component ItemIcon: Item {
         property var item
         Kirigami.Icon {
@@ -89,9 +142,33 @@ Item {
         }
     }
 
-    // ---- filter tabs ----
+    // ---- back, and the filter tabs (like Windows: filled pills, the current
+    // one in the accent color) ----
+    Rectangle {
+        id: back
+        x: 14
+        y: 14
+        width: 34; height: 34
+        radius: 6
+        color: backArea.containsMouse ? panel.pal.tintHover : "transparent"
+        Glyph {
+            anchors.centerIn: parent
+            name: "arrow_back"; fallback: "go-previous"
+            size: 18; wght: 300
+            color: panel.pal.text1
+            fontAvailable: panel.pal.hasIconFont
+        }
+        MouseArea {
+            id: backArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: panel.done()
+        }
+    }
     Row {
-        x: 20
+        anchors.left: back.right
+        anchors.leftMargin: 8
         y: 16
         spacing: 6
         Repeater {
@@ -100,16 +177,18 @@ Item {
                 id: tabChip
                 required property var modelData
                 readonly property bool current: panel.box.tab === modelData.id
-                width: tabText.implicitWidth + 24
+                width: tabText.implicitWidth + 26
                 height: 30
                 radius: 15
-                color: current ? panel.pal.tintHover : tabArea.containsMouse ? panel.pal.tint : "transparent"
+                color: current ? panel.pal.blue : tabArea.containsMouse ? panel.pal.tintHover : panel.pal.tint
+                border.width: current ? 0 : 1
+                border.color: panel.pal.stroke
                 Label {
                     id: tabText
                     anchors.centerIn: parent
                     text: tabChip.modelData.label
                     font.pixelSize: 12
-                    strong: tabChip.current
+                    color: tabChip.current ? panel.pal.blueText : panel.pal.text1
                 }
                 MouseArea {
                     id: tabArea
@@ -121,7 +200,6 @@ Item {
             }
         }
     }
-    Rectangle { y: 58; width: parent.width; height: 1; color: panel.pal.divider }
 
     // ---- before typing: Recent, and Top apps ----
     Item {
@@ -141,14 +219,14 @@ Item {
                     id: recentRow
                     required property var modelData
                     width: panel.listW
-                    height: 52
+                    height: 54
                     radius: 8
                     color: recentArea.containsMouse ? panel.pal.tintHover : "transparent"
-                    ItemIcon {
+                    IconTile {
                         id: recentIcon
                         x: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 32; height: 32
+                        width: 38; height: 38
                         item: ({ kind: "file", icon: recentRow.modelData.icon, folder: recentRow.modelData.folder })
                     }
                     Column {
@@ -271,19 +349,45 @@ Item {
                         readonly property bool firstOfGroup: index === 1 || (index > 1 && panel.kindLabel(panel.box.results[index - 1]) !== panel.kindLabel(modelData))
                         readonly property bool isSelected: index === panel.box.selected
                         Item { visible: entry.firstOfGroup; width: 1; height: 8 }
-                        Label {
+                        Item {
                             visible: entry.best || entry.firstOfGroup
-                            leftPadding: 6
-                            height: 26
-                            verticalAlignment: Text.AlignVCenter
-                            text: entry.best ? "Best match" : panel.kindLabel(entry.modelData)
-                            font.pixelSize: 12
-                            strong: true
-                            color: panel.pal.text2
+                            width: panel.listW
+                            height: 30
+                            readonly property string jump: entry.best ? "" : panel.tabFor(entry.modelData)
+                            Label {
+                                x: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: entry.best ? "Best match" : panel.kindLabel(entry.modelData)
+                                font.pixelSize: 13
+                                strong: true
+                            }
+                            // to that kind's own tab, like Windows
+                            Rectangle {
+                                visible: parent.jump !== "" && panel.box.tab === "all"
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 28; height: 28
+                                radius: 6
+                                color: jumpArea.containsMouse ? panel.pal.tintHover : "transparent"
+                                Glyph {
+                                    anchors.centerIn: parent
+                                    name: "chevron_right"; fallback: "go-next"
+                                    size: 18; wght: 300
+                                    color: panel.pal.text2
+                                    fontAvailable: panel.pal.hasIconFont
+                                }
+                                MouseArea {
+                                    id: jumpArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: panel.box.tab = parent.parent.jump
+                                }
+                            }
                         }
                         Rectangle {
                             width: panel.listW
-                            height: entry.best ? 64 : 50
+                            height: entry.best ? 62 : 54
                             radius: 8
                             color: entry.isSelected || rowArea.containsMouse ? panel.pal.tintHover : "transparent"
                             Rectangle {
@@ -292,11 +396,11 @@ Item {
                                 width: 3; height: 18; radius: 1.5
                                 color: panel.pal.blue
                             }
-                            ItemIcon {
+                            IconTile {
                                 id: rowIcon
                                 x: 14
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: entry.best ? 36 : 28
+                                width: entry.best ? 42 : 38
                                 height: width
                                 item: entry.modelData
                             }
@@ -344,6 +448,7 @@ Item {
 
         // details of the selected result
         Rectangle {
+            id: details
             visible: !!panel.current
             x: panel.listW + 32
             y: 14
@@ -385,49 +490,72 @@ Item {
                 return list;
             }
 
+            // Options folds out the rest of the choices; closed again for each result
+            property bool optionsOpen: false
+            onItemChanged: optionsOpen = false
+
             Column {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: 32
-                spacing: 8
+                x: 20
+                y: 20
                 width: parent.width - 40
-                ItemIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 64; height: 64
-                    item: panel.current
-                }
-                Item { width: 1; height: 4 }
+                spacing: 2
                 Label {
                     width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
                     text: panel.current ? panel.current.name : ""
                     strong: true
-                    font.pixelSize: 18
+                    font.pixelSize: 15
                 }
                 Label {
                     width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
                     text: panel.typeLabel(panel.current)
                     font.pixelSize: 12
                     color: panel.pal.text2
                 }
-            }
-            Rectangle { x: 20; y: 196; width: parent.width - 40; height: 1; color: panel.pal.divider }
-            Column {
-                x: 12
-                y: 208
-                width: parent.width - 24
-                spacing: 2
+                Item { width: 1; height: 14 }
+                Rectangle {
+                    width: parent.width
+                    height: 112
+                    radius: 8
+                    color: panel.pal.tint
+                    border.width: 1
+                    border.color: panel.pal.stroke
+                    ItemIcon {
+                        anchors.centerIn: parent
+                        width: 64; height: 64
+                        item: panel.current
+                    }
+                }
+                Item { width: 1; height: 12 }
+                Row {
+                    id: buttons
+                    spacing: 6
+                    readonly property int w: Math.floor((parent.width - 6) / 2)
+                    DetailButton {
+                        width: buttons.w
+                        text: "Open"
+                        onClicked: if (details.choices.length > 0) panel.run(details.choices[0])
+                    }
+                    DetailButton {
+                        visible: details.choices.length > 1
+                        width: buttons.w
+                        text: "Options"
+                        chevron: true
+                        open: details.optionsOpen
+                        onClicked: details.optionsOpen = !details.optionsOpen
+                    }
+                }
+                Item { width: 1; height: 6 }
                 Repeater {
-                    model: parent.parent.choices
+                    model: details.optionsOpen ? details.choices.slice(1) : []
                     Rectangle {
                         id: choice
                         required property var modelData
                         width: parent.width
-                        height: 38
+                        height: 36
                         radius: 6
                         color: choiceArea.containsMouse ? panel.pal.tintHover : "transparent"
                         Glyph {
-                            x: 12
+                            x: 10
                             anchors.verticalCenter: parent.verticalCenter
                             name: choice.modelData.glyph
                             size: 18; wght: 300
@@ -435,8 +563,8 @@ Item {
                             fontAvailable: panel.pal.hasIconFont
                         }
                         Label {
-                            x: 44
-                            width: parent.width - 52
+                            x: 40
+                            width: parent.width - 48
                             anchors.verticalCenter: parent.verticalCenter
                             text: choice.modelData.label
                         }
