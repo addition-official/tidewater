@@ -707,48 +707,52 @@ Item {
                     }
                 }
             }
-            Flickable {
+            // A ListView only makes the rows that are on screen (and a few more as
+            // you scroll), so the list opens at once however many apps there are.
+            ListView {
+                id: allList
                 anchors.top: chips.bottom
                 anchors.topMargin: 10
                 anchors.bottom: parent.bottom
                 width: parent.width
-                contentHeight: allCol.implicitHeight
+                rightMargin: 12
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                model: sm.allRows
+                reuseItems: true
                 QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
-                Column {
-                    id: allCol
-                    width: parent.width - 12
-                    Repeater {
-                        model: sm.view === "all" ? sm.allRows : []
-                        Loader {
-                            required property var modelData
-                            width: allCol.width
-                            sourceComponent: modelData.kind === "letter" ? letterRow : appRow
-                            Component {
-                                id: letterRow
-                                Label {
-                                    leftPadding: 12
-                                    height: 32
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: modelData.name
-                                    strong: true
-                                    color: sm.pal.blue
-                                }
-                            }
-                            Component {
-                                id: appRow
-                                ListRow { item: modelData }
-                            }
-                        }
-                    }
+                // back to the top when the filter changes
+                Connections {
+                    target: sm
+                    function onCategoryChanged() { allList.positionViewAtBeginning(); }
+                    function onViewChanged() { if (sm.view === "all") allList.positionViewAtBeginning(); }
+                }
+                delegate: Item {
+                    id: entry
+                    required property var modelData
+                    readonly property bool letter: modelData.kind === "letter"
+                    width: allList.width - allList.rightMargin
+                    height: letter ? 32 : 40
                     Label {
-                        visible: sm.allRows.length === 0
+                        visible: entry.letter
                         leftPadding: 12
-                        topPadding: 8
-                        text: "No apps here."
-                        color: sm.pal.text2
+                        height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        text: entry.modelData.name
+                        strong: true
+                        color: sm.pal.blue
                     }
+                    ListRow {
+                        visible: !entry.letter
+                        item: entry.modelData
+                    }
+                }
+                Label {
+                    visible: sm.allRows.length === 0
+                    leftPadding: 12
+                    topPadding: 8
+                    text: "No apps here."
+                    color: sm.pal.text2
                 }
             }
         }
