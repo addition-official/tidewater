@@ -46,9 +46,9 @@ PlasmoidItem {
             visible: parent.shown
             anchors.centerIn: parent
             pal: design
-            glyph: "grid_view"
-            svg: "taskview"   // like Windows' Task View button (common/Glyph.qml)
-            fallback: "view-grid-symbolic"
+            // the user's own Task View icon, in its own colors (common/taskview.svg)
+            image: Qt.resolvedUrl("common/taskview.svg")
+            imageTinted: false
             onClicked: exec.run("busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s Overview")
         }
     }
