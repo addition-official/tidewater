@@ -103,15 +103,18 @@ PlasmoidItem {
             field.forceActiveFocus();
             Qt.callLater(() => field.forceActiveFocus());   // after the panel takes the keyboard
         }
+        // The box lets go of the keyboard: to the panel itself, not to Plasma's
+        // wrapper around this widget (that would hand it straight back).
+        function dropFocus() {
+            field.focus = false;
+            const win = searchBar.Window.window;
+            if (win && win.contentItem && field.activeFocus) win.contentItem.forceActiveFocus();
+        }
         function stopTyping() {
             typing = false;
             tab = "all";
             field.text = "";
-            field.focus = false;
-            // and nothing of this widget keeps the keyboard (Plasma marks a
-            // panel widget that has it until another window is clicked)
-            const win = searchBar.Window.window;
-            if (win && win.contentItem) win.contentItem.forceActiveFocus();
+            dropFocus();
             Plasmoid.status = PlasmaCore.Types.PassiveStatus;
         }
         function activate(item) {
@@ -155,11 +158,11 @@ PlasmoidItem {
             radius: height / 2
             // typing, like Windows: darker, a grey outline and a blue
             // magnifier (no blue outline)
-            color: field.activeFocus ? (design.dark ? Qt.rgba(0, 0, 0, 0.3) : Qt.rgba(1, 1, 1, 1))
+            color: searchBar.parent.typing ? (design.dark ? Qt.rgba(0, 0, 0, 0.3) : Qt.rgba(1, 1, 1, 1))
                  : design.dark ? Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.11 : 0.07)
                                : Qt.rgba(1, 1, 1, barArea.containsMouse ? 0.95 : 0.75)
             border.width: 1
-            border.color: field.activeFocus ? design.alpha(design.fg, 0.28) : design.stroke
+            border.color: searchBar.parent.typing ? design.alpha(design.fg, 0.28) : design.stroke
             Behavior on color { ColorAnimation { duration: 120 } }
             Glyph {
                 id: lens
@@ -178,6 +181,12 @@ PlasmoidItem {
                 anchors.rightMargin: Math.round(searchBar.height * 0.4)
                 anchors.verticalCenter: parent.verticalCenter
                 background: null
+                // Only takes the keyboard while you are searching. Plasma hands
+                // the keyboard to the first text box it finds in the panel
+                // (when the panel gets it, and when this widget lets go of it),
+                // which left a blinking cursor here while you typed elsewhere.
+                activeFocusOnTab: false
+                cursorVisible: activeFocus && searchBar.parent.typing
                 color: design.text1
                 selectionColor: design.blue
                 selectedTextColor: design.blueText
@@ -193,7 +202,10 @@ PlasmoidItem {
                 }
                 // Lost the keyboard: clicked somewhere else, so stop typing. Not
                 // when the results panel got it (handed back, see below).
-                onActiveFocusChanged: if (!activeFocus) Qt.callLater(() => {
+                onActiveFocusChanged: if (activeFocus && !searchBar.parent.typing) {
+                    // given the keyboard without being clicked: pass it on
+                    Qt.callLater(searchBar.parent.dropFocus);
+                } else if (!activeFocus) Qt.callLater(() => {
                     if (!field.activeFocus && !resultsPopup.active && searchBar.parent.typing)
                         searchBar.parent.stopTyping();
                 })
@@ -208,7 +220,7 @@ PlasmoidItem {
             MouseArea {
                 id: barArea
                 anchors.fill: parent
-                enabled: !field.activeFocus
+                enabled: !searchBar.parent.typing
                 hoverEnabled: true
                 cursorShape: Qt.IBeamCursor
                 onClicked: {
