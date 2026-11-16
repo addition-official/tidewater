@@ -204,6 +204,12 @@ PlasmoidItem {
                 // (when the panel gets it, and when this widget lets go of it),
                 // which left a blinking cursor here while you typed elsewhere.
                 activeFocusOnTab: false
+                // No input method (Fcitx, IBus) on this box: they put a popup above the
+                // cursor, an empty strip in the highlight color until you type.
+                // Marked like a password field, which they leave alone; the text
+                // still shows as typed. (Typing Chinese, Japanese or Korean here
+                // is not possible because of it.)
+                inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                 cursorVisible: activeFocus && searchBar.parent.typing
                 color: design.text1
                 selectionColor: design.blue

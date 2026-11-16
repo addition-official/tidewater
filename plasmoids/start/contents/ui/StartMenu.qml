@@ -417,6 +417,12 @@ Item {
         }
         QQC2.TextField {
             id: search
+            // No input method (Fcitx, IBus) on this box: they put a popup above the
+            // cursor, an empty strip in the highlight color until you type.
+            // Marked like a password field, which they leave alone; the text
+            // still shows as typed. (Typing Chinese, Japanese or Korean here
+            // is not possible because of it.)
+            inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
             anchors.left: lens.right
             anchors.leftMargin: 8
             anchors.right: parent.right
