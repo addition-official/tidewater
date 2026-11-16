@@ -55,7 +55,17 @@ Item {
     onLastReadChanged: if (lastRead) history.lastRead = new Date(lastRead)
     Component.onCompleted: if (lastRead) history.lastRead = new Date(lastRead)
 
-    readonly property int unseen: history.unreadNotificationsCount
+    // Notifications newer than the last time they were read. Counted here,
+    // not with Plasma's own count: that one doesn't count anything while a
+    // pop-up is still on screen, so the badge only went up once it was gone.
+    readonly property int unseen: {
+        const since = lastRead ? Date.parse(lastRead) : 0;
+        let n = 0;
+        for (const e of entries)
+            if (e.when && e.when.getTime() > since)
+                ++n;
+        return n;
+    }
     readonly property int count: entries.length
     // A time for "read up to now", for the owner to share and save.
     function markRead() {
