@@ -441,9 +441,10 @@ Item {
             Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
             Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
             Keys.onEnterPressed: sm.activate(sm.results[sm.selected])
+            // Escape while searching closes the menu, like Windows (the back
+            // arrow is the way back to the menu)
             Keys.onEscapePressed: {
-                if (text.length > 0) text = "";
-                else if (sm.view !== "home") sm.view = "home";
+                if (sm.view !== "home" && text.length === 0) sm.view = "home";
                 else sm.app.close();
             }
         }
