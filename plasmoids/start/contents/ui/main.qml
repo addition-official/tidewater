@@ -77,7 +77,7 @@ PlasmoidItem {
     // "expanded", and leaning on that is deprecated in Qt 6 (and assigning to
     // it would only change that copy, not close the popup).
     onExpandedChanged: {
-        if (!root.expanded) return;
+        if (!root.expanded) { menuClosed(); return; }
         if (onScreen()) {
             // Just after Plasma (re)starts the panel may still be moving into
             // place, and a popup placed now can land in the corner: open it
@@ -95,6 +95,7 @@ PlasmoidItem {
                 return;
             }
             settled = false;
+            rememberFocus();
             refreshAll();
             return;
         }
@@ -105,6 +106,7 @@ PlasmoidItem {
             root.expanded = false;
             other.expanded = true;
         } else {
+            rememberFocus();
             refreshAll();                // no better copy: open this one as usual
         }
     }
@@ -127,11 +129,23 @@ PlasmoidItem {
 
     // ---- actions --------------------------------------------------------------
     function close() { root.expanded = false; }
-    function launch(id) { pyNow("launch " + exec.q(id)); close(); }
+    // Opening something hands the keyboard on to it: no going back (below).
+    function launch(id) { handingOff = true; pyNow("launch " + exec.q(id)); close(); }
     // one of the app's own actions, e.g. a browser's "New private window"
-    function launchAction(id, action) { pyNow("action " + exec.q(id) + " " + exec.q(action)); close(); }
-    function openUrl(url) { pyNow("open " + exec.q(url)); close(); }
-    function session(what) { close(); pyNow("session " + exec.q(what)); }
+    function launchAction(id, action) { handingOff = true; pyNow("action " + exec.q(id) + " " + exec.q(action)); close(); }
+    function openUrl(url) { handingOff = true; pyNow("open " + exec.q(url)); close(); }
+    function session(what) { handingOff = true; close(); pyNow("session " + exec.q(what)); }
+
+    // ---- the window you were in, back when the menu closes (FocusReturn.qml) --
+    FocusReturn { id: focusReturn }
+    property alias handingOff: focusReturn.handingOff
+    function rememberFocus() { focusReturn.remember(); }
+    function menuClosed() {
+        // the menu still had the keyboard: closed by Escape, the Start button
+        // or the Meta key, not by a click on another window or the desktop
+        const full = root.fullRepresentationItem;
+        focusReturn.closed(!!full && !!full.Window.window && full.Window.window.active);
+    }
     function mediaCmd(m) { pyNow("media-cmd " + exec.q(m)); mediaSettle.restart(); }
     Timer { id: mediaSettle; interval: 400; onTriggered: root.py("media") }
 

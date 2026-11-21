@@ -210,7 +210,8 @@ PlasmoidItem {
                 selectedTextColor: design.blueText
                 font.family: design.font
                 font.pixelSize: Math.max(12, Math.round(14 * Math.min(1, Math.max(0.85, design.unit))))
-                placeholderText: "Search"
+                // gone once the box is clicked, like Windows (an empty box, the cursor)
+                placeholderText: searchBar.parent.typing ? "" : "Search"
                 placeholderTextColor: design.mut
                 onTextChanged: {
                     const box = searchBar.parent;
