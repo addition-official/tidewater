@@ -129,6 +129,13 @@ PlasmoidItem {
 
     // ---- actions --------------------------------------------------------------
     function close() { root.expanded = false; }
+    // The new design's "View:" menu (category, grid, list): kept like any
+    // other Tidewater setting (see "Tidewater settings" below)
+    function setStartView(v) {
+        if (Plasmoid.configuration.startView === v) return;
+        Plasmoid.configuration.startView = v;
+        Plasmoid.configuration.settingsRev = String(Date.now());
+    }
     // Opening something hands the keyboard on to it: no going back (below).
     function launch(id) { handingOff = true; pyNow("launch " + exec.q(id)); close(); }
     // one of the app's own actions, e.g. a browser's "New private window"
@@ -437,13 +444,13 @@ PlasmoidItem {
         // A fixed size: Plasma remembers a popup's last size, and would
         // otherwise keep showing it at an older, bigger one. Wider while
         // searching, like Windows, where the search view is wider than Start.
-        readonly property int menuWidth: searching ? 820 : 640
-        Layout.preferredWidth: menuWidth
-        Layout.preferredHeight: 700
-        Layout.minimumWidth: menuWidth
-        Layout.minimumHeight: 700
-        Layout.maximumWidth: menuWidth
-        Layout.maximumHeight: 700
+        // (and the new design is bigger than the classic one)
+        Layout.preferredWidth: implicitWidth
+        Layout.preferredHeight: implicitHeight
+        Layout.minimumWidth: implicitWidth
+        Layout.minimumHeight: implicitHeight
+        Layout.maximumWidth: implicitWidth
+        Layout.maximumHeight: implicitHeight
         Connections {
             target: root
             // fresh each time it opens; and cleared as it closes, so it never

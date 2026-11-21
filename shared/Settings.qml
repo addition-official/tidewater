@@ -36,6 +36,8 @@ QtObject {
     property bool showDesktopCorner: false   // thin "show desktop" strip at the far right
     property bool showBell: false            // separate notification bell (they are in the clock)
     // start menu
+    property string startStyle: "new"        // new (one page, like current Windows 11), classic
+    property string startView: "category"    // the new one's app list: category, grid, list
     property bool showNowPlaying: true
     property bool showMenuPower: true
     // taskbar
@@ -65,6 +67,8 @@ QtObject {
             showPower: true,
             showDesktopCorner: false,
             showBell: false,
+            startStyle: "new",
+            startView: "category",
             showNowPlaying: true,
             showMenuPower: true,
             alignment: "center",
@@ -99,6 +103,10 @@ QtObject {
         const t = String(v);
         if (key === "searchStyle")
             return ["full", "bar", "icon", "hidden"].indexOf(t) >= 0 ? t : d;
+        if (key === "startStyle")
+            return t === "classic" ? "classic" : "new";
+        if (key === "startView")
+            return ["category", "grid", "list"].indexOf(t) >= 0 ? t : d;
         if (key === "workspaces")
             return ["numbers", "dots", "hidden"].indexOf(t) >= 0 ? t : d;
         if (key === "alignment")

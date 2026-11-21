@@ -34,6 +34,8 @@ KCM.SimpleKCM {
     property bool cfg_showBell
     property bool cfg_showNowPlaying
     property bool cfg_showMenuPower
+    property string cfg_startStyle
+    property string cfg_startView
     property string cfg_alignment
     property int cfg_iconSize
     property bool cfg_expand
@@ -58,6 +60,8 @@ KCM.SimpleKCM {
     property bool cfg_showBellDefault
     property bool cfg_showNowPlayingDefault
     property bool cfg_showMenuPowerDefault
+    property string cfg_startStyleDefault
+    property string cfg_startViewDefault
     property string cfg_alignmentDefault
     property int cfg_iconSizeDefault
     property bool cfg_expandDefault
@@ -350,6 +354,26 @@ KCM.SimpleKCM {
         Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: "Start menu"
+        }
+        QQC2.ButtonGroup { id: startStyleGroup }
+        QQC2.RadioButton {
+            Kirigami.FormData.label: "Design:"
+            text: "New (one page: pinned, recent and all apps, like Windows 11 today)"
+            QQC2.ButtonGroup.group: startStyleGroup
+            checked: cfg_startStyle !== "classic"
+            onToggled: if (checked) {
+                cfg_startStyle = "new";
+                page.touch();
+            }
+        }
+        QQC2.RadioButton {
+            text: "Classic (pinned and recommended; All apps on its own page)"
+            QQC2.ButtonGroup.group: startStyleGroup
+            checked: cfg_startStyle === "classic"
+            onToggled: if (checked) {
+                cfg_startStyle = "classic";
+                page.touch();
+            }
         }
         QQC2.CheckBox {
             Kirigami.FormData.label: "Media:"

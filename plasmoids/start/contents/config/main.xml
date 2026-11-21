@@ -22,6 +22,11 @@
     <entry name="showDesktopCorner" type="Bool"><default>false</default></entry>
     <!-- a separate notification bell; the notifications are also in the clock -->
     <entry name="showBell" type="Bool"><default>false</default></entry>
+    <!-- start menu: the design (new: one page like current Windows 11;
+         classic: pinned and recommended, All apps on a page of its own),
+         and how the new one lists every app (category, grid, list) -->
+    <entry name="startStyle" type="String"><default>new</default></entry>
+    <entry name="startView" type="String"><default>category</default></entry>
     <!-- start menu: now playing card and power button (right column) -->
     <entry name="showNowPlaying" type="Bool"><default>true</default></entry>
     <entry name="showMenuPower" type="Bool"><default>true</default></entry>

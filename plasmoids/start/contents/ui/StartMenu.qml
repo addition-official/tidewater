@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 addition-official
-// The start menu (640 x 700; 820 wide while searching), in the manner of Windows 11:
-// search on top; pinned apps and recommended (recent) files; a slim
-// now-playing strip while something plays; your name and the power button
-// at the bottom. "All apps" lists every app A to Z, with filters for the
-// app categories; "More" lists every recent file. Typing turns it into
-// the same search panel as the taskbar's box (common/SearchPanel.qml), with
+// The start menu, in the manner of Windows 11, in two designs (Tidewater's
+// settings, "startStyle"):
+// - new (800 x 780), like Windows 11 today: one page that scrolls: Pinned
+//   (two rows of eight, "Show all" for the rest), Recent (two rows of three,
+//   "Show all" for every recent file), and All: every app, by category
+//   (tiles of up to four icons; click one to open the app, or the tile for
+//   the whole category), as a grid or as a list ("View:", kept as
+//   "startView"). Checked against Windows 11 itself.
+// - classic (640 x 700): pinned apps and recommended files, with All apps
+//   (A to Z, with category filters) on a page of its own.
+// Both: search on top; a slim now-playing card while something plays; your
+// name and the power button at the bottom. Typing turns it into the same
+// search panel as the taskbar's box (common/SearchPanel.qml), 820 wide, with
 // this box on top, like Windows.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -21,13 +28,16 @@ Item {
     required property var app      // main.qml's root: data and actions
     required property var pal
 
-    implicitWidth: searching ? 820 : 640   // wider while searching, like Windows
-    implicitHeight: 700
+    readonly property bool modern: Settings.startStyle !== "classic"
+    implicitWidth: searching ? 820 : modern ? 800 : 640   // wider while searching, like Windows
+    implicitHeight: modern ? 780 : 700
 
     // float a little away from the panel and the screen edges, like Windows 11
     FloatingPopup {}
 
-    property string view: "home"   // home | all | recent
+    property string view: "home"   // home | all (classic) | recent
+    property bool pinnedExpanded: false   // new design: "Show all" pinned apps
+    property string openCategory: ""      // new design: the category shown in the panel
     property string category: "all"
     property string query: ""
     property int selected: 0
@@ -47,6 +57,8 @@ Item {
         view = "home";
         category = "all";
         tab = "all";
+        pinnedExpanded = false;
+        openCategory = "";
         selected = 0;
         search.forceActiveFocus();
     }
@@ -85,6 +97,66 @@ Item {
         }
         return rows;
     }
+
+    // ---- the new design's page, as rows (one ListView: only the rows on
+    // screen are made, so it opens at once however many apps there are) ----
+    readonly property int pinCols: 8
+    // the categories, in Windows' manner (from main.qml's categoryOf)
+    readonly property var catOrder: [
+        { id: "utilities", label: "Productivity" },
+        { id: "internet", label: "Internet" },
+        { id: "multimedia", label: "Creativity" },
+        { id: "development", label: "Development" },
+        { id: "games", label: "Games" },
+        { id: "system", label: "System" }
+    ]
+    function catLabel(id) { const c = catOrder.find(x => x.id === id); return c ? c.label : ""; }
+    readonly property var sortedApps: (app.apps || []).slice().sort((a, b) => a.name.localeCompare(b.name))
+    readonly property var homeRows: {
+        if (!modern) return [];
+        const rows = [];
+        const pins = app.pinnedApps || [];
+        rows.push({ kind: "pinnedHeader" });
+        if (pins.length === 0) rows.push({ kind: "note", text: "Right-click an app below to pin it here." });
+        for (let i = 0, r = 0; i < pins.length && (pinnedExpanded || r < 2); i += pinCols, r++)
+            rows.push({ kind: "pinnedRow", apps: pins.slice(i, i + pinCols) });
+        rows.push({ kind: "recentHeader" });
+        const rec = app.recent || [];
+        if (rec.length === 0) rows.push({ kind: "note", text: "Files you open will show up here." });
+        for (let i = 0; i < Math.min(rec.length, 6); i += 3)
+            rows.push({ kind: "recentRow", files: rec.slice(i, i + 3) });
+        if (playing) rows.push({ kind: "media" });
+        rows.push({ kind: "allHeader" });
+        const v = Settings.startView;
+        if (v === "category") {
+            const cats = catOrder.map(c => ({ id: c.id, label: c.label,
+                                              apps: sortedApps.filter(a => app.categoryOf(a) === c.id) }))
+                                 .filter(c => c.apps.length > 0);
+            for (let i = 0; i < cats.length; i += 4)
+                rows.push({ kind: "catRow", cats: cats.slice(i, i + 4) });
+        } else {
+            let letter = "", group = [];
+            const flush = () => {
+                if (!group.length) return;
+                rows.push({ kind: "letter", name: letter });
+                if (v === "grid")
+                    for (let i = 0; i < group.length; i += 7) rows.push({ kind: "gridRow", apps: group.slice(i, i + 7) });
+                else
+                    for (const a of group) rows.push({ kind: "listRow", app: a });
+                group = [];
+            };
+            for (const a of sortedApps) {
+                const c = a.name.charAt(0).toUpperCase();
+                const l = c.toLowerCase() !== c ? c : "#";
+                if (l !== letter) { flush(); letter = l; }
+                group.push(a);
+            }
+            flush();
+        }
+        rows.push({ kind: "end" });
+        return rows;
+    }
+    readonly property var openCategoryApps: openCategory === "" ? [] : sortedApps.filter(a => app.categoryOf(a) === openCategory)
 
     // ---- pieces ---------------------------------------------------------------
 
@@ -333,6 +405,188 @@ Item {
         }
     }
 
+    // ---- the new design's pieces ----------------------------------------------
+
+    // A section title with a plain text button on the right, like Windows:
+    // "Pinned ... Show all v", "Recent ... Show all >", "All ... View: Category v".
+    component HeaderRow: Item {
+        id: hr
+        property string title
+        property string button: ""
+        property string glyph: ""
+        signal clicked()
+        height: 46
+        Label { x: 8; y: 14; text: hr.title; strong: true; font.pixelSize: 14 }
+        Rectangle {
+            id: hrButton
+            visible: hr.button !== ""
+            anchors.right: parent.right
+            y: 8
+            width: hrRow.implicitWidth + 20
+            height: 30
+            radius: 6
+            color: hrArea.containsMouse ? sm.pal.tintHover : "transparent"
+            Row {
+                id: hrRow
+                anchors.centerIn: parent
+                spacing: 6
+                Label { anchors.verticalCenter: parent.verticalCenter; text: hr.button; font.pixelSize: 13 }
+                Glyph {
+                    visible: hr.glyph !== ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: hr.glyph; size: 16; wght: 300
+                    color: sm.pal.text1; fontAvailable: sm.pal.hasIconFont
+                }
+            }
+            MouseArea {
+                id: hrArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: hr.clicked()
+            }
+        }
+        // where the View menu opens
+        readonly property Item buttonItem: hrButton
+    }
+
+    // A recent file in the new design: its icon, its name and when; the
+    // folder shows on hover (like Windows' card).
+    component RecentCell: Item {
+        id: rc
+        property var file
+        height: 56
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 2
+            radius: 8
+            color: rcArea.containsMouse ? sm.pal.tintHover : "transparent"
+        }
+        Kirigami.Icon {
+            id: rcIcon
+            x: 12
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32; height: 32
+            source: rc.file ? (rc.file.icon || (rc.file.folder ? "folder" : "text-x-generic")) : ""
+            fallback: rc.file && rc.file.folder ? "folder" : "text-x-generic"
+        }
+        Column {
+            anchors.left: rcIcon.right
+            anchors.leftMargin: 12
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+            Label { width: parent.width; text: rc.file ? rc.file.name : "" }
+            Label {
+                width: parent.width
+                text: rc.file ? sm.app.ago(rc.file.when) : ""
+                font.pixelSize: 12
+                color: sm.pal.text2
+            }
+        }
+        MouseArea {
+            id: rcArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: if (rc.file) sm.app.openUrl(rc.file.url)
+        }
+        QQC2.ToolTip.visible: rcArea.containsMouse && !!rc.file
+        QQC2.ToolTip.text: rc.file ? rc.file.name + "\n" + sm.app.fileWhere(rc.file) : ""
+        QQC2.ToolTip.delay: 600
+    }
+
+    // A category in the new design: a tile with up to four of its apps
+    // (click one to open it) and the name under it; the rest of the tile
+    // opens the whole category.
+    component CategoryTile: Item {
+        id: ct
+        property var cat
+        height: width + 28
+        // the tile and its name open the whole category (its icons open apps)
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: if (ct.cat) sm.openCategory = ct.cat.id
+        }
+        Rectangle {
+            id: ctBox
+            x: 8
+            width: parent.width - 16
+            height: width
+            radius: 8
+            color: sm.pal.tint
+            border.width: 1
+            border.color: sm.pal.stroke
+            // always a 2 x 2 frame, filled from the top left (like Windows)
+            Grid {
+                anchors.centerIn: parent
+                width: 2 * Math.round(ctBox.width * 0.3) + spacing
+                height: width
+                columns: 2
+                spacing: Math.round(ctBox.width * 0.1)
+                Repeater {
+                    model: ct.cat ? ct.cat.apps.slice(0, 4) : []
+                    Rectangle {
+                        id: ctApp
+                        required property var modelData
+                        width: Math.round(ctBox.width * 0.3)
+                        height: width
+                        radius: 6
+                        color: ctAppArea.containsMouse ? sm.pal.tintHover : "transparent"
+                        Kirigami.Icon {
+                            anchors.centerIn: parent
+                            width: Math.round(parent.width * 0.75); height: width
+                            source: ctApp.modelData.icon || "application-x-executable"
+                            fallback: "application-x-executable"
+                        }
+                        MouseArea {
+                            id: ctAppArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: mouse => {
+                                if (mouse.button === Qt.RightButton) sm.showAppMenu(ctApp.modelData, ctApp, mouse.x, mouse.y);
+                                else sm.app.launch(ctApp.modelData.id);
+                            }
+                        }
+                        QQC2.ToolTip.visible: ctAppArea.containsMouse
+                        QQC2.ToolTip.text: ctApp.modelData.name
+                        QQC2.ToolTip.delay: 600
+                    }
+                }
+            }
+        }
+        Label {
+            anchors.top: ctBox.bottom
+            anchors.topMargin: 6
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: ct.cat ? ct.cat.label : ""
+            font.pixelSize: 12
+        }
+    }
+
+    // ---- the new design's View menu: category, grid, list -------------------
+    PlasmaExtras.Menu {
+        id: viewMenu
+        PlasmaExtras.MenuItem {
+            text: "Category"; checkable: true; checked: Settings.startView === "category"
+            onClicked: sm.app.setStartView("category")
+        }
+        PlasmaExtras.MenuItem {
+            text: "Grid"; checkable: true; checked: Settings.startView === "grid"
+            onClicked: sm.app.setStartView("grid")
+        }
+        PlasmaExtras.MenuItem {
+            text: "List"; checkable: true; checked: Settings.startView === "list"
+            onClicked: sm.app.setStartView("list")
+        }
+    }
+    function viewName(v) { return v === "grid" ? "Grid" : v === "list" ? "List" : "Category"; }
+
     // ---- right-click on any app (tile, list or search result) -----------------------
     // Plasma's own menu type, so it opens as a proper menu window.
     // The app's own actions from its .desktop file (New window, New private
@@ -451,7 +705,7 @@ Item {
             anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             visible: search.text.length === 0
-            text: "Search apps and files, or type > for actions"
+            text: sm.modern ? "Search for apps, settings, and documents" : "Search apps and files, or type > for actions"
             color: sm.pal.text3
         }
     }
@@ -474,9 +728,207 @@ Item {
             pal: sm.pal
         }
 
-        // ---- home: pinned and recommended ----
+        // ---- the new design: one page that scrolls ----
+        ListView {
+            id: homeList
+            visible: !sm.searching && sm.modern && sm.view === "home"
+            anchors.fill: parent
+            anchors.topMargin: -8
+            rightMargin: 6
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            cacheBuffer: 600
+            model: visible ? sm.homeRows : []
+            QQC2.ScrollBar.vertical: ThinScrollBar { tint: sm.pal.text2 }
+            Connections {
+                target: sm
+                function onViewChanged() { if (sm.view === "home") homeList.positionViewAtBeginning(); }
+            }
+            delegate: Loader {
+                id: rowLoader
+                required property var modelData
+                readonly property var row: modelData
+                readonly property int w: homeList.width - homeList.rightMargin
+                width: w
+                sourceComponent: {
+                    switch (modelData.kind) {
+                    case "pinnedHeader": return pinnedHeaderRow;
+                    case "recentHeader": return recentHeaderRow;
+                    case "allHeader": return allHeaderRow;
+                    case "pinnedRow": return pinnedRowC;
+                    case "recentRow": return recentRowC;
+                    case "media": return mediaRowC;
+                    case "catRow": return catRowC;
+                    case "letter": return letterRowC;
+                    case "gridRow": return gridRowC;
+                    case "listRow": return listRowC;
+                    case "note": return noteRowC;
+                    default: return endRowC;
+                    }
+                }
+            }
+        }
+        Component {
+            id: pinnedHeaderRow
+            HeaderRow {
+                width: parent ? parent.w : 0
+                title: "Pinned"
+                // two rows show; the rest behind "Show all", like Windows
+                button: (sm.app.pinnedApps || []).length > 2 * sm.pinCols ? (sm.pinnedExpanded ? "Show less" : "Show all") : ""
+                glyph: sm.pinnedExpanded ? "expand_less" : "expand_more"
+                onClicked: sm.pinnedExpanded = !sm.pinnedExpanded
+            }
+        }
+        Component {
+            id: recentHeaderRow
+            HeaderRow {
+                width: parent ? parent.w : 0
+                title: "Recent"
+                button: (sm.app.recent || []).length > 0 ? "Show all" : ""
+                glyph: "chevron_right"
+                onClicked: sm.view = "recent"
+            }
+        }
+        Component {
+            id: allHeaderRow
+            HeaderRow {
+                id: allHead
+                width: parent ? parent.w : 0
+                title: "All"
+                button: "View: " + sm.viewName(Settings.startView)
+                glyph: "expand_more"
+                onClicked: {
+                    viewMenu.visualParent = allHead.buttonItem;
+                    viewMenu.openRelative();
+                }
+            }
+        }
+        Component {
+            id: pinnedRowC
+            Row {
+                readonly property int cell: Math.floor((parent ? parent.w : 0) / sm.pinCols)
+                Repeater {
+                    model: parent && parent.parent ? parent.parent.row.apps : []
+                    AppTile { width: parent.cell }
+                }
+            }
+        }
+        Component {
+            id: recentRowC
+            Row {
+                Repeater {
+                    model: parent && parent.parent ? parent.parent.row.files : []
+                    RecentCell {
+                        required property var modelData
+                        file: modelData
+                        width: Math.floor((parent && parent.parent ? parent.parent.w : 0) / 3)
+                    }
+                }
+            }
+        }
+        Component {
+            id: mediaRowC
+            Item {
+                height: 68
+                MediaCard { y: 4; x: 8; width: (parent.parent ? parent.parent.w : 0) - 16 }
+            }
+        }
+        Component {
+            id: catRowC
+            Row {
+                readonly property int cell: Math.floor((parent ? parent.w : 0) / 4)
+                Repeater {
+                    model: parent && parent.parent ? parent.parent.row.cats : []
+                    CategoryTile {
+                        required property var modelData
+                        cat: modelData
+                        width: parent.cell
+                    }
+                }
+            }
+        }
+        Component {
+            id: letterRowC
+            Item {
+                height: 40
+                Label { x: 8; anchors.verticalCenter: parent.verticalCenter; text: parent.parent ? parent.parent.row.name : ""; strong: true }
+            }
+        }
+        Component {
+            id: gridRowC
+            Row {
+                readonly property int cell: Math.floor((parent ? parent.w : 0) / 7)
+                Repeater {
+                    model: parent && parent.parent ? parent.parent.row.apps : []
+                    AppTile { width: parent.cell }
+                }
+            }
+        }
+        Component {
+            id: listRowC
+            ListRow {
+                width: parent ? parent.w : 0
+                item: parent ? ({ kind: "app", id: parent.row.app.id, name: parent.row.app.name, icon: parent.row.app.icon }) : ({ kind: "app" })
+            }
+        }
+        Component {
+            id: noteRowC
+            Item {
+                height: 34
+                Label { x: 8; anchors.verticalCenter: parent.verticalCenter; text: parent.parent ? parent.parent.row.text : ""; color: sm.pal.text2 }
+            }
+        }
+        Component { id: endRowC; Item { height: 12 } }
+
+        // ---- the new design: a category, opened from its tile ----
+        MouseArea {
+            // a click anywhere else closes it
+            visible: catPanel.visible
+            anchors.fill: parent
+            onClicked: sm.openCategory = ""
+        }
+        Rectangle {
+            id: catPanel
+            visible: sm.openCategory !== "" && homeList.visible
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Math.max(0, (parent.height - height) / 2)
+            width: 4 * 104 + 40
+            height: Math.min(parent.height - 20, catGrid.implicitHeight + 96)
+            radius: 10
+            color: sm.pal.dark ? "#2b2c32" : "#f7f7f9"
+            border.width: 1
+            border.color: sm.pal.stroke
+            MouseArea { anchors.fill: parent }   // clicks inside stay inside
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 22
+                text: sm.catLabel(sm.openCategory)
+                strong: true
+                font.pixelSize: 18
+            }
+            Flickable {
+                x: 20
+                y: 66
+                width: parent.width - 40
+                height: parent.height - 86
+                contentHeight: catGrid.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                QQC2.ScrollBar.vertical: ThinScrollBar { tint: sm.pal.text2 }
+                Grid {
+                    id: catGrid
+                    columns: 4
+                    Repeater {
+                        model: sm.openCategoryApps
+                        AppTile { width: 104 }
+                    }
+                }
+            }
+        }
+
+        // ---- the classic design: pinned and recommended ----
         Item {
-            visible: !sm.searching && sm.view === "home"
+            visible: !sm.searching && !sm.modern && sm.view === "home"
             anchors.fill: parent
 
             SectionHeader {
@@ -550,73 +1002,10 @@ Item {
             }
 
             // ---- now playing (only while something plays; can be turned off) ----
-            Rectangle {
+            MediaCard {
                 visible: sm.playing
                 anchors.bottom: parent.bottom
                 width: parent.width
-                height: 56
-                radius: 8
-                color: sm.pal.tint
-                border.width: 1
-                border.color: sm.pal.stroke
-                readonly property var m: sm.app.media || {}
-                Rectangle {
-                    id: artBox
-                    x: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 36
-                    height: 36
-                    radius: 6
-                    color: sm.pal.tintHover
-                    clip: true
-                    Image {
-                        id: art
-                        anchors.fill: parent
-                        source: parent.parent.m.art || ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        visible: status === Image.Ready
-                    }
-                    Glyph {
-                        anchors.centerIn: parent
-                        visible: !art.visible
-                        name: "music_note"; fallback: "media-album-cover"
-                        size: 20; wght: 300
-                        color: sm.pal.text2
-                        fontAvailable: sm.pal.hasIconFont
-                    }
-                }
-                Column {
-                    anchors.left: artBox.right
-                    anchors.leftMargin: 12
-                    anchors.right: controls.left
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 1
-                    Label { width: parent.width; text: parent.parent.m.title || "" }
-                    Label {
-                        visible: text.length > 0
-                        width: parent.width
-                        text: parent.parent.m.artist || ""
-                        font.pixelSize: 12
-                        color: sm.pal.text2
-                    }
-                }
-                Row {
-                    id: controls
-                    anchors.right: parent.right
-                    anchors.rightMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 4
-                    MediaButton { glyph: "skip_previous"; fallback: "media-skip-backward"; onClicked: sm.app.mediaCmd("Previous") }
-                    MediaButton {
-                        main: true
-                        glyph: parent.parent.m.playing ? "pause" : "play_arrow"
-                        fallback: parent.parent.m.playing ? "media-playback-pause" : "media-playback-start"
-                        onClicked: sm.app.mediaCmd("PlayPause")
-                    }
-                    MediaButton { glyph: "skip_next"; fallback: "media-skip-forward"; onClicked: sm.app.mediaCmd("Next") }
-                }
             }
         }
 
@@ -725,7 +1114,7 @@ Item {
             anchors.fill: parent
             SectionHeader {
                 id: recentHeader
-                text: "Recommended"
+                text: sm.modern ? "Recent" : "Recommended"
                 button: "Back"
                 leading: "chevron_left"
                 onClicked: sm.view = "home"
@@ -749,6 +1138,73 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // What's playing: the cover, title and artist, and the controls.
+    component MediaCard: Rectangle {
+        height: 56
+        radius: 8
+        color: sm.pal.tint
+        border.width: 1
+        border.color: sm.pal.stroke
+        readonly property var m: sm.app.media || {}
+        Rectangle {
+            id: artBox
+            x: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: 36
+            height: 36
+            radius: 6
+            color: sm.pal.tintHover
+            clip: true
+            Image {
+                id: art
+                anchors.fill: parent
+                source: parent.parent.m.art || ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                visible: status === Image.Ready
+            }
+            Glyph {
+                anchors.centerIn: parent
+                visible: !art.visible
+                name: "music_note"; fallback: "media-album-cover"
+                size: 20; wght: 300
+                color: sm.pal.text2
+                fontAvailable: sm.pal.hasIconFont
+            }
+        }
+        Column {
+            anchors.left: artBox.right
+            anchors.leftMargin: 12
+            anchors.right: controls.left
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+            Label { width: parent.width; text: parent.parent.m.title || "" }
+            Label {
+                visible: text.length > 0
+                width: parent.width
+                text: parent.parent.m.artist || ""
+                font.pixelSize: 12
+                color: sm.pal.text2
+            }
+        }
+        Row {
+            id: controls
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            MediaButton { glyph: "skip_previous"; fallback: "media-skip-backward"; onClicked: sm.app.mediaCmd("Previous") }
+            MediaButton {
+                main: true
+                glyph: parent.parent.m.playing ? "pause" : "play_arrow"
+                fallback: parent.parent.m.playing ? "media-playback-pause" : "media-playback-start"
+                onClicked: sm.app.mediaCmd("PlayPause")
+            }
+            MediaButton { glyph: "skip_next"; fallback: "media-skip-forward"; onClicked: sm.app.mediaCmd("Next") }
         }
     }
 
