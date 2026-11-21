@@ -304,13 +304,16 @@ sleep 2
 # moved to the start widget: still read, so an older panel's settings move over.
 KEEP=$(python3 - "$RC" <<'PY' 2>/dev/null || echo '{}'
 import json, re, sys
-LISTS = {"launchers", "pinned"}            # StringList settings
+LISTS = {"launchers", "pinned"}            # StringList settings (and below)
 # Tidewater's settings: the start widget keeps them (see shared/Settings.qml)
 # (every option in the start widget's config, so newer ones are never missed)
 try:
     SETTINGS = [n for n in re.findall(r'<entry name="([^"]+)"',
                 open("plasmoids/start/contents/config/main.xml").read())
                 if n not in ("pinned", "settingsRev")]
+    # list settings are kept as lists (e.g. the hidden recent files)
+    LISTS |= set(re.findall(r'<entry name="([^"]+)" type="StringList"',
+                            open("plasmoids/start/contents/config/main.xml").read()))
 except OSError:
     SETTINGS = []
 SETTINGS = SETTINGS or ["startIcon", "searchStyle", "showOverview", "workspaces",

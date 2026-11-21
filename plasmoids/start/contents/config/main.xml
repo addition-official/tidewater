@@ -27,6 +27,9 @@
          and how the new one lists every app (category, grid, list) -->
     <entry name="startStyle" type="String"><default>new</default></entry>
     <entry name="startView" type="String"><default>category</default></entry>
+    <!-- recent files taken off the start menu ("Remove from list"); the
+         system's own list of recent files is left as it is -->
+    <entry name="hiddenRecent" type="StringList"><default></default></entry>
     <!-- start menu: now playing card and power button (right column) -->
     <entry name="showNowPlaying" type="Bool"><default>true</default></entry>
     <entry name="showMenuPower" type="Bool"><default>true</default></entry>

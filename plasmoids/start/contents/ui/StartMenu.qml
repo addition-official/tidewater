@@ -233,6 +233,7 @@ Item {
     component AppTile: Item {
         id: tile
         required property var modelData
+        property bool pinnedTile: false   // in Pinned: its menu can move it
         width: 96
         height: 84
         Rectangle {
@@ -266,7 +267,7 @@ Item {
             cursorShape: Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) sm.showAppMenu(tile.modelData, tile, mouse.x, mouse.y);
+                if (mouse.button === Qt.RightButton) sm.showAppMenu(tile.modelData, tile, mouse.x, mouse.y, tile.pinnedTile);
                 else sm.app.launch(tile.modelData.id);
             }
         }
@@ -314,7 +315,11 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: sm.app.openUrl(fileRow.modelData.url)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) sm.showFileMenu(fileRow.modelData, fileRow, mouse.x, mouse.y);
+                else sm.app.openUrl(fileRow.modelData.url);
+            }
         }
     }
 
@@ -490,7 +495,12 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: if (rc.file) sm.app.openUrl(rc.file.url)
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (!rc.file) return;
+                if (mouse.button === Qt.RightButton) sm.showFileMenu(rc.file, rc, mouse.x, mouse.y);
+                else sm.app.openUrl(rc.file.url);
+            }
         }
         QQC2.ToolTip.visible: rcArea.containsMouse && !!rc.file
         QQC2.ToolTip.text: rc.file ? rc.file.name + "\n" + sm.app.fileWhere(rc.file) : ""
@@ -602,7 +612,8 @@ Item {
             onClicked: sm.app.launchAction(appId, actionId)
         }
     }
-    function showAppMenu(app, item, x, y) {
+    function showAppMenu(app, item, x, y, pinned) {
+        appMenu.fromPinned = !!pinned;
         // Search results and tiles may carry only id/name/icon: use the full app
         // entry (which has the actions) whenever there is one.
         const full = app ? (sm.app.apps || []).find(a => a.id === app.id) : null;
@@ -622,10 +633,33 @@ Item {
     PlasmaExtras.Menu {
         id: appMenu
         property var target: null
+        property bool fromPinned: false     // opened on a pinned app: it can be moved
         readonly property string targetId: target ? target.id : ""
+        readonly property int pinAt: fromPinned && targetId !== "" ? sm.app.pinIndex(targetId) : -1
+        readonly property int pinCount: (sm.app.pinnedApps || []).length
         readonly property bool onStart: targetId !== "" && sm.app.isPinned(targetId)
         readonly property bool onTaskbar: targetId !== "" && sm.app.isOnTaskbar(targetId)
 
+        // a pinned app's place, like Windows ("Move to front / left / right")
+        PlasmaExtras.MenuItem {
+            visible: appMenu.pinAt > 0
+            text: "Move to front"
+            icon: "go-first"
+            onClicked: sm.app.movePin(appMenu.targetId, "front")
+        }
+        PlasmaExtras.MenuItem {
+            visible: appMenu.pinAt > 0
+            text: "Move left"
+            icon: "go-previous"
+            onClicked: sm.app.movePin(appMenu.targetId, -1)
+        }
+        PlasmaExtras.MenuItem {
+            visible: appMenu.pinAt >= 0 && appMenu.pinAt < appMenu.pinCount - 1
+            text: "Move right"
+            icon: "go-next"
+            onClicked: sm.app.movePin(appMenu.targetId, 1)
+        }
+        PlasmaExtras.MenuItem { visible: appMenu.pinAt >= 0; separator: true }
         PlasmaExtras.MenuItem {
             text: "Open"
             icon: "system-run"
@@ -642,6 +676,35 @@ Item {
             text: appMenu.onTaskbar ? "Unpin from taskbar" : "Pin to taskbar"
             icon: appMenu.onTaskbar ? "window-unpin" : "window-pin"
             onClicked: sm.app.toggleTaskbar(appMenu.targetId)
+        }
+    }
+
+    // ---- right-click on a recent file ------------------------------------------------
+    // Like Windows: Open file location, and Remove from list (only off this
+    // menu; the system's own list of recent files stays as it is).
+    function showFileMenu(file, item, x, y) {
+        fileMenu.target = file;
+        fileMenu.visualParent = item;
+        fileMenu.open(x, y);
+    }
+    PlasmaExtras.Menu {
+        id: fileMenu
+        property var target: null
+        PlasmaExtras.MenuItem {
+            text: "Open"
+            icon: "document-open"
+            onClicked: if (fileMenu.target) sm.app.openUrl(fileMenu.target.url)
+        }
+        PlasmaExtras.MenuItem {
+            text: "Open file location"
+            icon: "folder-open"
+            onClicked: if (fileMenu.target) sm.app.revealFile(fileMenu.target.url)
+        }
+        PlasmaExtras.MenuItem { separator: true }
+        PlasmaExtras.MenuItem {
+            text: "Remove from list"
+            icon: "list-remove"
+            onClicked: if (fileMenu.target) sm.app.hideRecent(fileMenu.target.url)
         }
     }
 
@@ -809,7 +872,7 @@ Item {
                 readonly property int cell: Math.floor((parent ? parent.w : 0) / sm.pinCols)
                 Repeater {
                     model: parent && parent.parent ? parent.parent.row.apps : []
-                    AppTile { width: parent.cell }
+                    AppTile { width: parent.cell; pinnedTile: true }
                 }
             }
         }
@@ -957,7 +1020,7 @@ Item {
                     rowSpacing: 4
                     Repeater {
                         model: sm.app.pinnedApps
-                        AppTile {}
+                        AppTile { pinnedTile: true }
                     }
                 }
                 Label {

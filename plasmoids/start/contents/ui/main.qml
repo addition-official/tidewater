@@ -52,7 +52,7 @@ PlasmoidItem {
             try { data = JSON.parse(out); } catch (e) { return; }
             if (rest === "apps") root.apps = data;
             else if (rest === "settings") root.settingsPages = data;
-            else if (rest === "recent") root.recent = data;
+            else if (rest === "recent") root.recent = root.withoutHidden(data);
             else if (rest === "stats") root.stats = data;
             else if (rest === "media") root.media = data;
             else if (rest === "taskbar-pins") root.taskbarPins = data;
@@ -199,6 +199,36 @@ PlasmoidItem {
         pinsSettle.restart();
     }
     Timer { id: pinsSettle; interval: 700; onTriggered: root.py("taskbar-pins") }
+    // Pinned apps in a new order, like Windows' "Move to front / left / right":
+    // `where` is "front", -1 (left) or 1 (right).
+    function movePin(id, where) {
+        const shown = pinnedApps.map(a => a.id);
+        const i = shown.indexOf(id);
+        if (i < 0) return;
+        const j = where === "front" ? 0 : i + where;
+        if (j < 0 || j >= shown.length || j === i) return;
+        shown.splice(i, 1);
+        shown.splice(j, 0, id);
+        // apps not installed any more keep their place at the end
+        Plasmoid.configuration.pinned = shown.concat(pinnedIds.filter(x => shown.indexOf(x) < 0));
+    }
+    function pinIndex(id) { return pinnedApps.findIndex(a => a.id === id); }
+
+    // ---- recent files: "Remove from list" and "Open file location" -----------
+    // Removed files are only taken off the start menu (Tidewater's own list,
+    // "hiddenRecent"); the system's list of recent files, which other apps
+    // use too, stays as it is.
+    readonly property var hiddenRecent: Plasmoid.configuration.hiddenRecent || []
+    function withoutHidden(list) { return (list || []).filter(f => hiddenRecent.indexOf(f.url) < 0); }
+    function hideRecent(url) {
+        if (!url || hiddenRecent.indexOf(url) >= 0) return;
+        // the newest 200 are plenty
+        Plasmoid.configuration.hiddenRecent = hiddenRecent.concat([url]).slice(-200);
+        recent = withoutHidden(recent);
+    }
+    // the file's folder, with the file selected (as KDE's apps do it)
+    function revealFile(url) { handingOff = true; pyNow("reveal " + exec.q(url)); close(); }
+
     function togglePin(id) {
         const list = pinnedIds.slice();
         const i = list.indexOf(id);

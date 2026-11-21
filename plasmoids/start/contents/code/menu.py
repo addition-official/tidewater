@@ -465,6 +465,27 @@ def recent(limit=20):
     return items[:limit]
 
 
+def reveal(url):
+    """Show a file in its folder with it selected: the file manager's
+    standard D-Bus call (org.freedesktop.FileManager1.ShowItems, which
+    Dolphin and others answer), or else just open the folder."""
+    if not isinstance(url, str) or not url.startswith("file://"):
+        return
+    path = urllib.parse.unquote(url[7:])
+    # busctl takes each argument as it is (a comma in a name is just a comma)
+    if shutil.which("busctl"):
+        try:
+            r = subprocess.run(["busctl", "--user", "call", "org.freedesktop.FileManager1",
+                                "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1",
+                                "ShowItems", "ass", "1", url, ""],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            if r.returncode == 0:
+                return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try_run(["xdg-open", os.path.dirname(path.rstrip("/")) or "/"])
+
+
 def files(query, limit=6):
     if not query or not shutil.which("baloosearch6"):
         return []
@@ -717,6 +738,8 @@ def main():
         launch(arg)
     elif cmd == "action" and len(sys.argv) == 4 and valid_id(sys.argv[2]):
         launch_action(sys.argv[2], sys.argv[3])
+    elif cmd == "reveal":
+        reveal(arg)
     elif cmd == "open":
         open_url(arg)
     elif cmd == "taskbar-pins":
