@@ -112,6 +112,7 @@ Item {
         tab = "all";
         pinnedExpanded = false;
         closePanel();
+        kbSection = "";
         selected = 0;
         search.forceActiveFocus();
     }
@@ -165,6 +166,22 @@ Item {
     ]
     function catLabel(id) { const c = catOrder.find(x => x.id === id); return c ? c.label : ""; }
     readonly property var sortedApps: (app.apps || []).slice().sort((a, b) => a.name.localeCompare(b.name))
+    // the categories that have apps, and the apps A to Z in letter groups
+    // ("#" for digits and symbols), as the page shows them
+    readonly property var catList: catOrder.map(c => ({ id: c.id, label: c.label,
+                                                       apps: sortedApps.filter(a => app.categoryOf(a) === c.id) }))
+                                           .filter(c => c.apps.length > 0)
+    readonly property var letterGroups: {
+        const out = [];
+        for (const a of sortedApps) {
+            const c = a.name.charAt(0).toUpperCase();
+            const l = c.toLowerCase() !== c ? c : "#";
+            if (!out.length || out[out.length - 1].letter !== l) out.push({ letter: l, apps: [] });
+            out[out.length - 1].apps.push(a);
+        }
+        return out;
+    }
+    readonly property var allInOrder: [].concat(...letterGroups.map(g => g.apps))
     readonly property var homeRows: {
         if (!modern) return [];
         const rows = [];
@@ -177,37 +194,108 @@ Item {
         const rec = app.recent || [];
         if (rec.length === 0) rows.push({ kind: "note", text: "Files you open will show up here." });
         for (let i = 0; i < Math.min(rec.length, 6); i += 3)
-            rows.push({ kind: "recentRow", files: rec.slice(i, i + 3) });
+            rows.push({ kind: "recentRow", files: rec.slice(i, i + 3), first: i });
         if (playing) rows.push({ kind: "media" });
         rows.push({ kind: "allHeader" });
         const v = Settings.startView;
         if (v === "category") {
-            const cats = catOrder.map(c => ({ id: c.id, label: c.label,
-                                              apps: sortedApps.filter(a => app.categoryOf(a) === c.id) }))
-                                 .filter(c => c.apps.length > 0);
-            for (let i = 0; i < cats.length; i += 4)
-                rows.push({ kind: "catRow", cats: cats.slice(i, i + 4) });
+            for (let i = 0; i < catList.length; i += 4)
+                rows.push({ kind: "catRow", cats: catList.slice(i, i + 4), first: i });
         } else {
-            let letter = "", group = [];
-            const flush = () => {
-                if (!group.length) return;
-                rows.push({ kind: "letter", name: letter });
-                if (v === "grid")
-                    for (let i = 0; i < group.length; i += 7) rows.push({ kind: "gridRow", apps: group.slice(i, i + 7) });
-                else
-                    for (const a of group) rows.push({ kind: "listRow", app: a });
-                group = [];
-            };
-            for (const a of sortedApps) {
-                const c = a.name.charAt(0).toUpperCase();
-                const l = c.toLowerCase() !== c ? c : "#";
-                if (l !== letter) { flush(); letter = l; }
-                group.push(a);
+            let n = 0;      // each app's place in allInOrder (for the keyboard)
+            for (const g of letterGroups) {
+                rows.push({ kind: "letter", name: g.letter });
+                if (v === "grid") {
+                    for (let i = 0; i < g.apps.length; i += 7) {
+                        rows.push({ kind: "gridRow", apps: g.apps.slice(i, i + 7), first: n });
+                        n += Math.min(7, g.apps.length - i);
+                    }
+                } else {
+                    for (const a of g.apps) rows.push({ kind: "listRow", app: a, first: n++ });
+                }
             }
-            flush();
         }
         rows.push({ kind: "end" });
         return rows;
+    }
+    // ---- the keyboard, in the new design (like Windows): typing searches;
+    // Tab / Shift+Tab go from section to section (Pinned, Recent, All), the
+    // arrow keys move inside one, Enter opens. The search box keeps the
+    // keyboard; this is the item shown as focused (a white outline).
+    property string kbSection: ""          // "" (none), "pinned", "recent", "all"
+    property int kbIndex: 0
+    function kbFocused(section, i) { return kbSection === section && kbIndex === i; }
+    function kbList(section) {
+        if (section === "pinned") return (app.pinnedItems || []).slice(0, pinnedExpanded ? 9999 : 2 * pinCols);
+        if (section === "recent") return (app.recent || []).slice(0, 6);
+        if (section === "all") return Settings.startView === "category" ? catList : allInOrder;
+        return [];
+    }
+    function kbCols(section) {
+        if (section === "pinned") return pinCols;
+        if (section === "recent") return 3;
+        const v = Settings.startView;
+        return v === "category" ? 4 : v === "grid" ? 7 : 1;
+    }
+    readonly property var kbSections: ["pinned", "recent", "all"].filter(x => kbList(x).length > 0)
+    function kbTab(step) {
+        const list = kbSections;
+        if (!list.length) return;
+        const i = list.indexOf(kbSection);
+        kbSection = i < 0 ? (step > 0 ? list[0] : list[list.length - 1]) : list[(i + step + list.length) % list.length];
+        kbIndex = 0;
+        kbShow();
+    }
+    function kbMove(step) {
+        if (kbSection === "") return false;
+        const n = kbList(kbSection).length;
+        kbIndex = Math.max(0, Math.min(n - 1, kbIndex + step));
+        kbShow();
+        return true;
+    }
+    function kbOpen() {
+        const it = kbList(kbSection)[kbIndex];
+        if (!it) return false;
+        if (kbSection === "pinned") {
+            if (it.kind === "folder") { openCategory = ""; openFolder = kbIndex; }
+            else app.launch(it.id);
+        } else if (kbSection === "recent") {
+            app.openUrl(it.url);
+        } else if (Settings.startView === "category") {
+            openFolder = -1; openCategory = it.id;
+        } else {
+            app.launch(it.id);
+        }
+        return true;
+    }
+    // Up and Down: one row, same column. The grid's rows break at each letter,
+    // so it goes by the rows on the page; elsewhere a row is `cols` items.
+    function kbVertical(dir) {
+        if (kbSection === "") return false;
+        if (kbSection === "all" && Settings.startView === "grid") {
+            const rows = homeRows.filter(r => r.kind === "gridRow");
+            const r = rows.findIndex(x => kbIndex >= x.first && kbIndex < x.first + x.apps.length);
+            const next = rows[r + dir];
+            if (r < 0 || !next) return true;
+            kbIndex = next.first + Math.min(kbIndex - rows[r].first, next.apps.length - 1);
+            kbShow();
+            return true;
+        }
+        return kbMove(dir * kbCols(kbSection));
+    }
+    // scroll the page so the focused item shows
+    function kbShow() {
+        const rows = homeRows;
+        const kinds = { pinned: ["pinnedRow"], recent: ["recentRow"], all: ["catRow", "gridRow", "listRow"] }[kbSection] || [];
+        for (let r = 0; r < rows.length; ++r) {
+            const row = rows[r];
+            if (kinds.indexOf(row.kind) < 0) continue;
+            const count = row.kind === "listRow" ? 1 : (row.apps || row.files || row.cats || []).length;
+            if (kbIndex >= row.first && kbIndex < row.first + count) {
+                homeList.positionViewAtIndex(r, ListView.Contain);
+                return;
+            }
+        }
     }
     readonly property var openCategoryApps: openCategory === "" ? [] : sortedApps.filter(a => app.categoryOf(a) === openCategory)
 
@@ -297,6 +385,9 @@ Item {
         Component.onCompleted: if (pinnedTile) sm.registerTile(tile)
         Component.onDestruction: sm.unregisterTile(tile)
         DropMark { key: tile.pinKey }
+        property string kbAs: pinnedTile ? "pinned" : ""   // its keyboard section
+        property int kbAt: place                          // its place there
+        FocusRing { on: tile.kbAs !== "" && sm.kbFocused(tile.kbAs, tile.kbAt) }
         width: 96
         height: 84
         Rectangle {
@@ -538,7 +629,10 @@ Item {
     component RecentCell: Item {
         id: rc
         property var file
+        property int kbAt: -1
+        readonly property bool kbOn: sm.kbFocused("recent", kbAt)
         height: 56
+        FocusRing { on: rc.kbOn }
         Rectangle {
             anchors.fill: parent
             anchors.margins: 2
@@ -580,7 +674,7 @@ Item {
                 else sm.app.openUrl(rc.file.url);
             }
         }
-        QQC2.ToolTip.visible: rcArea.containsMouse && !!rc.file
+        QQC2.ToolTip.visible: (rcArea.containsMouse || rc.kbOn) && !!rc.file
         QQC2.ToolTip.text: rc.file ? rc.file.name + "\n" + sm.app.fileWhere(rc.file) : ""
         QQC2.ToolTip.delay: 600
     }
@@ -591,6 +685,7 @@ Item {
     component CategoryTile: Item {
         id: ct
         property var cat
+        property int kbAt: -1
         height: width + 28
         // the tile and its name open the whole category (its icons open apps)
         MouseArea {
@@ -607,6 +702,7 @@ Item {
             color: sm.pal.tint
             border.width: 1
             border.color: sm.pal.stroke
+            FocusRing { on: sm.kbFocused("all", ct.kbAt) }
             // always a 2 x 2 frame, filled from the top left (like Windows)
             Grid {
                 anchors.centerIn: parent
@@ -657,6 +753,19 @@ Item {
         }
     }
 
+    // The keyboard's focused item: a white (dark mode) or black outline.
+    component FocusRing: Rectangle {
+        property bool on: false
+        visible: on
+        anchors.fill: parent
+        anchors.margins: 1
+        radius: 8
+        color: "transparent"
+        border.width: 2
+        border.color: sm.pal.text1
+        z: 5
+    }
+
     // Where a dragged pinned app would land: an outline over the tile (into a
     // folder) or a line at its edge (moved there).
     component DropMark: Item {
@@ -695,6 +804,7 @@ Item {
         Component.onDestruction: sm.unregisterTile(ft)
         height: 84
         DropMark { key: ft.pinKey }
+        FocusRing { on: sm.kbFocused("pinned", ft.place) }
         Rectangle {
             anchors.fill: parent
             anchors.margins: 2
@@ -977,14 +1087,28 @@ Item {
             leftPadding: 2
             placeholderText: ""
             onTextChanged: {
+                sm.kbSection = "";       // typing: back to searching
                 sm.query = text;
                 sm.selected = 0;
                 sm.app.searchFiles(text);
             }
-            Keys.onDownPressed: sm.selected = Math.max(0, Math.min(sm.results.length - 1, sm.selected + 1))
-            Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
-            Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
-            Keys.onEnterPressed: sm.activate(sm.results[sm.selected])
+            // the new design's page, by keyboard (see kbSection); searching,
+            // the results
+            readonly property bool onPage: sm.modern && !sm.searching && sm.view === "home" && !sm.panelOpen
+            Keys.onTabPressed: event => { if (onPage) sm.kbTab(1); else event.accepted = false; }
+            Keys.onBacktabPressed: event => { if (onPage) sm.kbTab(-1); else event.accepted = false; }
+            Keys.onLeftPressed: event => { event.accepted = onPage && sm.kbMove(-1); }
+            Keys.onRightPressed: event => { event.accepted = onPage && sm.kbMove(1); }
+            Keys.onDownPressed: {
+                if (onPage) { if (sm.kbSection === "") sm.kbTab(1); else sm.kbVertical(1); }
+                else sm.selected = Math.max(0, Math.min(sm.results.length - 1, sm.selected + 1));
+            }
+            Keys.onUpPressed: {
+                if (onPage) sm.kbVertical(-1);
+                else sm.selected = Math.max(0, sm.selected - 1);
+            }
+            Keys.onReturnPressed: { if (onPage) sm.kbOpen(); else sm.activate(sm.results[sm.selected]); }
+            Keys.onEnterPressed: { if (onPage) sm.kbOpen(); else sm.activate(sm.results[sm.selected]); }
             // Escape closes the menu, like Windows (checked on Windows 11:
             // from search and from a sub-page alike; the back arrows are the
             // way back), except with a category or app folder open: then it
@@ -1132,11 +1256,15 @@ Item {
         Component {
             id: recentRowC
             Row {
+                id: recRow
+                readonly property var rowData: parent ? parent.row : null
                 Repeater {
-                    model: parent && parent.parent ? parent.parent.row.files : []
+                    model: recRow.rowData ? recRow.rowData.files : []
                     RecentCell {
                         required property var modelData
+                        required property int index
                         file: modelData
+                        kbAt: recRow.rowData ? recRow.rowData.first + index : -1
                         width: Math.floor((parent && parent.parent ? parent.parent.w : 0) / 3)
                     }
                 }
@@ -1152,13 +1280,17 @@ Item {
         Component {
             id: catRowC
             Row {
+                id: catRow
                 readonly property int cell: Math.floor((parent ? parent.w : 0) / 4)
+                readonly property var rowData: parent ? parent.row : null
                 Repeater {
-                    model: parent && parent.parent ? parent.parent.row.cats : []
+                    model: catRow.rowData ? catRow.rowData.cats : []
                     CategoryTile {
                         required property var modelData
+                        required property int index
                         cat: modelData
-                        width: parent.cell
+                        kbAt: catRow.rowData ? catRow.rowData.first + index : -1
+                        width: catRow.cell
                     }
                 }
             }
@@ -1173,10 +1305,24 @@ Item {
         Component {
             id: gridRowC
             Row {
+                id: gridRow
                 readonly property int cell: Math.floor((parent ? parent.w : 0) / 7)
+                readonly property var rowData: parent ? parent.row : null
                 Repeater {
-                    model: parent && parent.parent ? parent.parent.row.apps : []
-                    AppTile { width: parent.cell }
+                    model: gridRow.rowData ? gridRow.rowData.apps : []
+                    Item {
+                        id: gridCell
+                        required property var modelData
+                        required property int index
+                        width: gridRow.cell
+                        height: 84
+                        AppTile {
+                            modelData: gridCell.modelData
+                            width: gridCell.width
+                            kbAs: "all"
+                            kbAt: gridRow.rowData ? gridRow.rowData.first + gridCell.index : -1
+                        }
+                    }
                 }
             }
         }
@@ -1185,6 +1331,7 @@ Item {
             ListRow {
                 width: parent ? parent.w : 0
                 item: parent ? ({ kind: "app", id: parent.row.app.id, name: parent.row.app.name, icon: parent.row.app.icon }) : ({ kind: "app" })
+                FocusRing { on: !!parent.parent && sm.kbFocused("all", parent.parent.row.first) }
             }
         }
         Component {
