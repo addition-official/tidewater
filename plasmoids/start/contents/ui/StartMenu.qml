@@ -38,6 +38,59 @@ Item {
     property string view: "home"   // home | all (classic) | recent
     property bool pinnedExpanded: false   // new design: "Show all" pinned apps
     property string openCategory: ""      // new design: the category shown in the panel
+    property int openFolder: -1           // new design: the app folder shown (its place in Pinned)
+    readonly property var openFolderItem: {
+        const it = openFolder >= 0 ? (app.pinnedItems || [])[openFolder] : null;
+        return it && it.kind === "folder" ? it : null;
+    }
+    readonly property bool panelOpen: openCategory !== "" || !!openFolderItem
+    function closePanel() { openCategory = ""; openFolder = -1; }
+
+    // ---- dragging in Pinned (new design), like Windows: drop between tiles
+    // to move an app or folder there; drop an app on another app to make a
+    // folder of the two, or on a folder to add it.
+    property var dragging: null          // { key, kind, icon, folder } while dragging
+    property point dragAt                // where the pointer is (in sm)
+    property var dropHint: null          // { key, zone: "before" | "after" | "on" }
+    property var pinTiles: []            // the pinned tiles on screen
+    function registerTile(t) { pinTiles = pinTiles.concat([t]); }
+    function unregisterTile(t) { pinTiles = pinTiles.filter(x => x !== t); }
+    // the pinned tile under a point (in sm), and which part of it
+    function pinnedAt(pt) {
+        for (const t of pinTiles) {
+            if (!t.visible || !t.pinKey) continue;
+            const p = t.mapFromItem(sm, pt.x, pt.y);
+            if (p.x < 0 || p.y < 0 || p.x >= t.width || p.y >= t.height) continue;
+            const f = p.x / t.width;
+            return { key: t.pinKey, kind: t.pinKind, place: t.place,
+                     zone: f < 0.25 ? "before" : f > 0.75 ? "after" : "on" };
+        }
+        return null;
+    }
+    function dragStart(info) { dragging = info; dropHint = null; }
+    function dragMove(pt) {
+        dragAt = pt;
+        const h = pinnedAt(pt);
+        if (!h || h.key === dragging.key) { dropHint = null; return; }
+        // a folder never goes into anything: next to it instead
+        if (h.zone === "on" && dragging.kind === "folder") h.zone = "before";
+        dropHint = { key: h.key, zone: h.zone, kind: h.kind, place: h.place };
+    }
+    function dragEnd() {
+        const src = dragging, h = dropHint;
+        dragging = null;
+        dropHint = null;
+        if (!src || !h) return;
+        if (h.zone === "on") {
+            if (h.kind === "folder") app.addToFolder(h.key, src.key);
+            else app.makeFolder(h.key, src.key);
+            return;
+        }
+        const from = app.pinIndex(src.key);
+        let to = h.place + (h.zone === "after" ? 1 : 0);
+        if (from < to) to -= 1;      // its own place goes away first
+        app.movePinTo(src.key, to);
+    }
     property string category: "all"
     property string query: ""
     property int selected: 0
@@ -58,7 +111,7 @@ Item {
         category = "all";
         tab = "all";
         pinnedExpanded = false;
-        openCategory = "";
+        closePanel();
         selected = 0;
         search.forceActiveFocus();
     }
@@ -115,11 +168,11 @@ Item {
     readonly property var homeRows: {
         if (!modern) return [];
         const rows = [];
-        const pins = app.pinnedApps || [];
+        const pins = app.pinnedItems || [];
         rows.push({ kind: "pinnedHeader" });
         if (pins.length === 0) rows.push({ kind: "note", text: "Right-click an app below to pin it here." });
         for (let i = 0, r = 0; i < pins.length && (pinnedExpanded || r < 2); i += pinCols, r++)
-            rows.push({ kind: "pinnedRow", apps: pins.slice(i, i + pinCols) });
+            rows.push({ kind: "pinnedRow", apps: pins.slice(i, i + pinCols), first: i });
         rows.push({ kind: "recentHeader" });
         const rec = app.recent || [];
         if (rec.length === 0) rows.push({ kind: "note", text: "Files you open will show up here." });
@@ -234,6 +287,16 @@ Item {
         id: tile
         required property var modelData
         property bool pinnedTile: false   // in Pinned: its menu can move it
+        property string folderKey: ""     // in an app folder (the folder's entry)
+        property int place: -1            // in Pinned: its place there
+        // for dragging (sm.pinnedAt)
+        readonly property string pinKey: pinnedTile && modelData ? (modelData.id || "") : ""
+        readonly property string pinKind: "app"
+        // faded in its old place while it is being dragged
+        opacity: sm.dragging && pinKey !== "" && sm.dragging.key === pinKey ? 0.35 : 1
+        Component.onCompleted: if (pinnedTile) sm.registerTile(tile)
+        Component.onDestruction: sm.unregisterTile(tile)
+        DropMark { key: tile.pinKey }
         width: 96
         height: 84
         Rectangle {
@@ -266,8 +329,23 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: tile.pinnedTile && sm.modern   // a drag moves the app, not the page
+            property point pressAt
+            property bool dragged: false
+            onPressed: mouse => { pressAt = Qt.point(mouse.x, mouse.y); dragged = false; }
+            onPositionChanged: mouse => {
+                if (!pressed || !(pressedButtons & Qt.LeftButton) || !tile.pinnedTile || !sm.modern) return;
+                if (!dragged && Math.hypot(mouse.x - pressAt.x, mouse.y - pressAt.y) > 8) {
+                    dragged = true;
+                    sm.dragStart({ key: tile.pinKey, kind: "app", icon: tile.modelData.icon });
+                }
+                if (dragged) sm.dragMove(mapToItem(sm, mouse.x, mouse.y));
+            }
+            onReleased: if (dragged) sm.dragEnd()
+            onCanceled: if (dragged) { sm.dragging = null; sm.dropHint = null; }
             onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) sm.showAppMenu(tile.modelData, tile, mouse.x, mouse.y, tile.pinnedTile);
+                if (dragged) { dragged = false; return; }
+                if (mouse.button === Qt.RightButton) sm.showAppMenu(tile.modelData, tile, mouse.x, mouse.y, tile.pinnedTile, tile.folderKey);
                 else sm.app.launch(tile.modelData.id);
             }
         }
@@ -579,6 +657,141 @@ Item {
         }
     }
 
+    // Where a dragged pinned app would land: an outline over the tile (into a
+    // folder) or a line at its edge (moved there).
+    component DropMark: Item {
+        property string key
+        anchors.fill: parent
+        readonly property var hint: sm.dropHint && key !== "" && sm.dropHint.key === key ? sm.dropHint : null
+        Rectangle {
+            visible: !!parent.hint && parent.hint.zone === "on"
+            anchors.fill: parent
+            anchors.margins: 2
+            radius: 8
+            color: sm.pal.tintHover
+            border.width: 2
+            border.color: sm.pal.blue
+        }
+        Rectangle {
+            visible: !!parent.hint && parent.hint.zone !== "on"
+            x: parent.hint && parent.hint.zone === "after" ? parent.width - 2 : 0
+            y: 10
+            width: 3; height: parent.height - 20
+            radius: 1.5
+            color: sm.pal.blue
+        }
+    }
+
+    // An app folder in Pinned, like Windows: a rounded square with up to four
+    // of its apps, and its name. Click: open it; right-click: move it.
+    component FolderTile: Item {
+        id: ft
+        property var folder: null
+        property int place: -1            // its place in Pinned
+        readonly property string pinKey: folder ? folder.key : ""
+        readonly property string pinKind: "folder"
+        opacity: sm.dragging && pinKey !== "" && sm.dragging.key === pinKey ? 0.35 : 1
+        Component.onCompleted: sm.registerTile(ft)
+        Component.onDestruction: sm.unregisterTile(ft)
+        height: 84
+        DropMark { key: ft.pinKey }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 2
+            radius: 8
+            color: ftArea.containsMouse ? sm.pal.tintHover : "transparent"
+        }
+        Rectangle {
+            id: ftBox
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 10
+            width: 40; height: 40
+            radius: 8
+            color: sm.pal.tintHover
+            border.width: 1
+            border.color: sm.pal.stroke
+            Grid {
+                x: 5; y: 5
+                width: 30; height: 30
+                columns: 2
+                spacing: 2
+                Repeater {
+                    model: ft.folder ? ft.folder.apps.slice(0, 4) : []
+                    Kirigami.Icon {
+                        required property var modelData
+                        width: 14; height: 14
+                        source: modelData.icon || "application-x-executable"
+                        fallback: "application-x-executable"
+                    }
+                }
+            }
+        }
+        Label {
+            anchors.top: ftBox.bottom
+            anchors.topMargin: 7
+            x: 4
+            width: parent.width - 8
+            horizontalAlignment: Text.AlignHCenter
+            text: ft.folder ? ft.folder.name : ""
+            font.pixelSize: 12
+        }
+        MouseArea {
+            id: ftArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: true
+            property point pressAt
+            property bool dragged: false
+            onPressed: mouse => { pressAt = Qt.point(mouse.x, mouse.y); dragged = false; }
+            onPositionChanged: mouse => {
+                if (!pressed || !(pressedButtons & Qt.LeftButton) || !ft.folder) return;
+                if (!dragged && Math.hypot(mouse.x - pressAt.x, mouse.y - pressAt.y) > 8) {
+                    dragged = true;
+                    sm.dragStart({ key: ft.pinKey, kind: "folder", folder: ft.folder });
+                }
+                if (dragged) sm.dragMove(mapToItem(sm, mouse.x, mouse.y));
+            }
+            onReleased: if (dragged) sm.dragEnd()
+            onCanceled: if (dragged) { sm.dragging = null; sm.dropHint = null; }
+            onClicked: mouse => {
+                if (dragged) { dragged = false; return; }
+                if (!ft.folder) return;
+                if (mouse.button === Qt.RightButton) {
+                    folderMenu.key = ft.folder.key;
+                    folderMenu.visualParent = ft;
+                    folderMenu.open(mouse.x, mouse.y);
+                } else {
+                    sm.openCategory = "";
+                    sm.openFolder = ft.place;
+                }
+            }
+        }
+    }
+    // a folder's own menu: only where it goes (like Windows)
+    PlasmaExtras.Menu {
+        id: folderMenu
+        property string key: ""
+        readonly property int at: key !== "" ? sm.app.pinIndex(key) : -1
+        readonly property int count: (sm.app.pinnedItems || []).length
+        PlasmaExtras.MenuItem {
+            visible: folderMenu.at > 0
+            text: "Move to front"; icon: "go-first"
+            onClicked: sm.app.movePin(folderMenu.key, "front")
+        }
+        PlasmaExtras.MenuItem {
+            visible: folderMenu.at > 0
+            text: "Move left"; icon: "go-previous"
+            onClicked: sm.app.movePin(folderMenu.key, -1)
+        }
+        PlasmaExtras.MenuItem {
+            visible: folderMenu.at >= 0 && folderMenu.at < folderMenu.count - 1
+            text: "Move right"; icon: "go-next"
+            onClicked: sm.app.movePin(folderMenu.key, 1)
+        }
+    }
+
     // ---- the new design's View menu: category, grid, list -------------------
     PlasmaExtras.Menu {
         id: viewMenu
@@ -612,8 +825,9 @@ Item {
             onClicked: sm.app.launchAction(appId, actionId)
         }
     }
-    function showAppMenu(app, item, x, y, pinned) {
+    function showAppMenu(app, item, x, y, pinned, folderKey) {
         appMenu.fromPinned = !!pinned;
+        appMenu.folderKey = folderKey || "";
         // Search results and tiles may carry only id/name/icon: use the full app
         // entry (which has the actions) whenever there is one.
         const full = app ? (sm.app.apps || []).find(a => a.id === app.id) : null;
@@ -634,9 +848,10 @@ Item {
         id: appMenu
         property var target: null
         property bool fromPinned: false     // opened on a pinned app: it can be moved
+        property string folderKey: ""       // opened on an app in an app folder
         readonly property string targetId: target ? target.id : ""
         readonly property int pinAt: fromPinned && targetId !== "" ? sm.app.pinIndex(targetId) : -1
-        readonly property int pinCount: (sm.app.pinnedApps || []).length
+        readonly property int pinCount: (sm.app.pinnedItems || []).length
         readonly property bool onStart: targetId !== "" && sm.app.isPinned(targetId)
         readonly property bool onTaskbar: targetId !== "" && sm.app.isOnTaskbar(targetId)
 
@@ -659,7 +874,19 @@ Item {
             icon: "go-next"
             onClicked: sm.app.movePin(appMenu.targetId, 1)
         }
-        PlasmaExtras.MenuItem { visible: appMenu.pinAt >= 0; separator: true }
+        PlasmaExtras.MenuItem {
+            visible: appMenu.pinAt >= 0 && sm.modern
+            text: "Create a new app folder"
+            icon: "folder-new"
+            onClicked: sm.app.createFolder(appMenu.targetId)
+        }
+        PlasmaExtras.MenuItem {
+            visible: appMenu.folderKey !== ""
+            text: "Remove from app folder"
+            icon: "edit-remove"
+            onClicked: sm.app.removeFromFolder(appMenu.folderKey, appMenu.targetId)
+        }
+        PlasmaExtras.MenuItem { visible: appMenu.pinAt >= 0 || appMenu.folderKey !== ""; separator: true }
         PlasmaExtras.MenuItem {
             text: "Open"
             icon: "system-run"
@@ -758,10 +985,14 @@ Item {
             Keys.onUpPressed: sm.selected = Math.max(0, sm.selected - 1)
             Keys.onReturnPressed: sm.activate(sm.results[sm.selected])
             Keys.onEnterPressed: sm.activate(sm.results[sm.selected])
-            // Escape always closes the menu, like Windows (checked on Windows
-            // 11: from search and from a sub-page alike); the back arrows are
-            // the way back
-            Keys.onEscapePressed: sm.app.close()
+            // Escape closes the menu, like Windows (checked on Windows 11:
+            // from search and from a sub-page alike; the back arrows are the
+            // way back), except with a category or app folder open: then it
+            // closes just that
+            Keys.onEscapePressed: {
+                if (sm.panelOpen) sm.closePanel();
+                else sm.app.close();
+            }
         }
         Label {
             anchors.left: lens.right
@@ -837,7 +1068,7 @@ Item {
                 width: parent ? parent.w : 0
                 title: "Pinned"
                 // two rows show; the rest behind "Show all", like Windows
-                button: (sm.app.pinnedApps || []).length > 2 * sm.pinCols ? (sm.pinnedExpanded ? "Show less" : "Show all") : ""
+                button: (sm.app.pinnedItems || []).length > 2 * sm.pinCols ? (sm.pinnedExpanded ? "Show less" : "Show all") : ""
                 glyph: sm.pinnedExpanded ? "expand_less" : "expand_more"
                 onClicked: sm.pinnedExpanded = !sm.pinnedExpanded
             }
@@ -869,10 +1100,32 @@ Item {
         Component {
             id: pinnedRowC
             Row {
+                id: pinRow
                 readonly property int cell: Math.floor((parent ? parent.w : 0) / sm.pinCols)
+                readonly property var rowData: parent ? parent.row : null
                 Repeater {
-                    model: parent && parent.parent ? parent.parent.row.apps : []
-                    AppTile { width: parent.cell; pinnedTile: true }
+                    model: pinRow.rowData ? pinRow.rowData.apps : []
+                    Item {
+                        id: pinCell
+                        required property var modelData
+                        required property int index
+                        readonly property bool folder: modelData.kind === "folder"
+                        width: pinRow.cell
+                        height: 84
+                        AppTile {
+                            visible: !pinCell.folder
+                            modelData: pinCell.folder ? ({ id: "", name: "", icon: "" }) : pinCell.modelData
+                            width: pinCell.width
+                            pinnedTile: !pinCell.folder
+                            place: pinRow.rowData ? pinRow.rowData.first + pinCell.index : -1
+                        }
+                        FolderTile {
+                            visible: pinCell.folder
+                            folder: pinCell.folder ? pinCell.modelData : null
+                            place: pinRow.rowData ? pinRow.rowData.first + pinCell.index : -1
+                            width: pinCell.width
+                        }
+                    }
                 }
             }
         }
@@ -948,11 +1201,11 @@ Item {
             // a click anywhere else closes it
             visible: catPanel.visible
             anchors.fill: parent
-            onClicked: sm.openCategory = ""
+            onClicked: sm.closePanel()
         }
         Rectangle {
             id: catPanel
-            visible: sm.openCategory !== "" && homeList.visible
+            visible: sm.panelOpen && homeList.visible
             anchors.horizontalCenter: parent.horizontalCenter
             y: Math.max(0, (parent.height - height) / 2)
             width: 4 * 104 + 40
@@ -963,11 +1216,68 @@ Item {
             border.color: sm.pal.stroke
             MouseArea { anchors.fill: parent }   // clicks inside stay inside
             Label {
+                visible: !sm.openFolderItem
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 22
                 text: sm.catLabel(sm.openCategory)
                 strong: true
                 font.pixelSize: 18
+            }
+            // a folder's name: click it to rename it (like Windows)
+            Rectangle {
+                objectName: "folderTitle"
+                visible: !!sm.openFolderItem
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 14
+                width: Math.max(200, folderName.implicitWidth + 40)
+                height: 40
+                radius: 6
+                color: folderName.activeFocus ? sm.pal.alpha(sm.pal.dark ? "black" : "white", 0.25)
+                     : nameArea.containsMouse ? sm.pal.tintHover : "transparent"
+                border.width: folderName.activeFocus ? 1 : 0
+                border.color: sm.pal.stroke
+                Rectangle {
+                    visible: folderName.activeFocus
+                    anchors.bottom: parent.bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width - 2 * parent.radius
+                    height: 2
+                    color: sm.pal.blue
+                }
+                TextInput {
+                    id: folderName
+                    anchors.fill: parent
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    font.family: sm.pal.font
+                    font.pixelSize: 18
+                    font.weight: Font.DemiBold
+                    color: sm.pal.text1
+                    selectionColor: sm.pal.blue
+                    selectedTextColor: sm.pal.blueText
+                    clip: true
+                    maximumLength: 60
+                    readonly property string saved: sm.openFolderItem ? sm.openFolderItem.name : ""
+                    onSavedChanged: if (!activeFocus) text = saved
+                    Component.onCompleted: text = saved
+                    function commit() {
+                        if (sm.openFolderItem && text.trim() !== sm.openFolderItem.name)
+                            sm.app.renameFolder(sm.openFolderItem.key, text);
+                        search.forceActiveFocus();
+                    }
+                    Keys.onReturnPressed: commit()
+                    Keys.onEnterPressed: commit()
+                    Keys.onEscapePressed: { text = saved; search.forceActiveFocus(); }
+                    onActiveFocusChanged: if (!activeFocus && text.trim() !== saved) commit()
+                }
+                MouseArea {
+                    id: nameArea
+                    anchors.fill: parent
+                    visible: !folderName.activeFocus
+                    hoverEnabled: true
+                    cursorShape: Qt.IBeamCursor
+                    onClicked: { folderName.forceActiveFocus(); folderName.selectAll(); }
+                }
             }
             Flickable {
                 x: 20
@@ -982,8 +1292,8 @@ Item {
                     id: catGrid
                     columns: 4
                     Repeater {
-                        model: sm.openCategoryApps
-                        AppTile { width: 104 }
+                        model: sm.openFolderItem ? sm.openFolderItem.apps : sm.openCategoryApps
+                        AppTile { width: 104; folderKey: sm.openFolderItem ? sm.openFolderItem.key : "" }
                     }
                 }
             }
@@ -1367,4 +1677,28 @@ Item {
             QQC2.ToolTip.delay: 500
         }
     }
+
+    // ---- the dragged app or folder, following the pointer ----
+    Item {
+        visible: !!sm.dragging
+        x: sm.dragAt.x - 20
+        y: sm.dragAt.y - 20
+        width: 40; height: 40
+        z: 1000
+        opacity: 0.85
+        Kirigami.Icon {
+            visible: !!sm.dragging && sm.dragging.kind === "app"
+            anchors.fill: parent
+            source: sm.dragging && sm.dragging.icon ? sm.dragging.icon : "application-x-executable"
+        }
+        Rectangle {
+            visible: !!sm.dragging && sm.dragging.kind === "folder"
+            anchors.fill: parent
+            radius: 8
+            color: sm.pal.tintHover
+            border.width: 1
+            border.color: sm.pal.stroke
+        }
+    }
+
 }

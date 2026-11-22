@@ -177,19 +177,51 @@ PlasmoidItem {
     }
 
     // ---- pinned -----------------------------------------------------------------
+    // Saved as a list of entries (Plasmoid.configuration.pinned): an app's id,
+    // or an app folder, "folder:<name>:<id>|<id>|...", name URI-encoded.
     readonly property var pinnedIds: Plasmoid.configuration.pinned
-    readonly property var pinnedApps: {
+    readonly property var appsById: {
         const byId = {};
         for (const a of apps) byId[a.id] = a;
-        const seen = {};
+        return byId;
+    }
+    function isFolderEntry(e) { return String(e).startsWith("folder:"); }
+    function parseFolder(e) {
+        const rest = String(e).substring(7);
+        const at = rest.indexOf(":");
+        let name = "Folder";
+        try { name = decodeURIComponent(rest.substring(0, at)) || "Folder"; } catch (err) {}
+        return { name: name, ids: rest.substring(at + 1).split("|").filter(x => x.length > 0) };
+    }
+    function folderEntry(name, ids) { return "folder:" + encodeURIComponent(name || "Folder") + ":" + ids.join("|"); }
+    // What Pinned shows (the new design): apps and folders, in order. Apps
+    // that are not installed (any more) are left out; so is a folder with none.
+    readonly property var pinnedItems: {
         const out = [];
-        for (const id of pinnedIds) {
-            const a = byId[id];
-            if (a && !seen[a.name]) { seen[a.name] = true; out.push(a); }
+        const seen = {};
+        for (const e of pinnedIds) {
+            if (isFolderEntry(e)) {
+                const f = parseFolder(e);
+                const fa = f.ids.map(id => appsById[id]).filter(a => !!a);
+                if (fa.length > 0) out.push({ kind: "folder", key: e, name: f.name, apps: fa });
+            } else {
+                const a = appsById[e];
+                if (a && !seen[a.name]) { seen[a.name] = true; out.push(a); }
+            }
         }
         return out;
     }
-    function isPinned(id) { return pinnedIds.indexOf(id) >= 0; }
+    // Every pinned app, folders opened up (search, the classic design, menus)
+    readonly property var pinnedApps: {
+        const out = [];
+        for (const it of pinnedItems) {
+            if (it.kind === "folder") for (const a of it.apps) out.push(a);
+            else out.push(it);
+        }
+        return out;
+    }
+    function keyOf(item) { return item.kind === "folder" ? item.key : item.id; }
+    function isPinned(id) { return pinnedApps.some(a => a.id === id); }
     function isOnTaskbar(id) { return taskbarPins.indexOf(id) >= 0; }
     function toggleTaskbar(id) {
         const pin = !isOnTaskbar(id);
@@ -199,20 +231,88 @@ PlasmoidItem {
         pinsSettle.restart();
     }
     Timer { id: pinsSettle; interval: 700; onTriggered: root.py("taskbar-pins") }
-    // Pinned apps in a new order, like Windows' "Move to front / left / right":
-    // `where` is "front", -1 (left) or 1 (right).
-    function movePin(id, where) {
-        const shown = pinnedApps.map(a => a.id);
-        const i = shown.indexOf(id);
-        if (i < 0) return;
-        const j = where === "front" ? 0 : i + where;
-        if (j < 0 || j >= shown.length || j === i) return;
-        shown.splice(i, 1);
-        shown.splice(j, 0, id);
-        // apps not installed any more keep their place at the end
-        Plasmoid.configuration.pinned = shown.concat(pinnedIds.filter(x => shown.indexOf(x) < 0));
+
+    // The saved list without `id` anywhere (top level or in a folder);
+    // a folder left empty goes.
+    function withoutApp(list, id) {
+        const out = [];
+        for (const e of list) {
+            if (isFolderEntry(e)) {
+                const f = parseFolder(e);
+                const ids = f.ids.filter(x => x !== id);
+                if (ids.length > 0) out.push(ids.length === f.ids.length ? e : folderEntry(f.name, ids));
+            } else if (e !== id) {
+                out.push(e);
+            }
+        }
+        return out;
     }
-    function pinIndex(id) { return pinnedApps.findIndex(a => a.id === id); }
+    function savePins(list) { Plasmoid.configuration.pinned = list; }
+    function togglePin(id) {
+        if (isPinned(id)) savePins(withoutApp(pinnedIds, id));
+        else savePins(pinnedIds.concat([id]));
+    }
+    // The shown position of an app (by id) or a folder (by its entry)
+    function pinIndex(key) { return pinnedItems.findIndex(it => keyOf(it) === key); }
+    // A pinned app or folder to position `to` among what Pinned shows;
+    // entries for apps not installed keep their place at the end.
+    function movePinTo(key, to) {
+        const shown = pinnedItems.map(keyOf);
+        const i = shown.indexOf(key);
+        if (i < 0) return;
+        to = Math.max(0, Math.min(shown.length - 1, to));
+        if (to === i) return;
+        shown.splice(i, 1);
+        shown.splice(to, 0, key);
+        savePins(shown.concat(pinnedIds.filter(x => shown.indexOf(x) < 0)));
+    }
+    // "Move to front / left / right", like Windows: `where` is "front", -1 or 1.
+    function movePin(key, where) {
+        const i = pinIndex(key);
+        if (i < 0) return;
+        movePinTo(key, where === "front" ? 0 : i + where);
+    }
+
+    // ---- app folders, like Windows 11 ----------------------------------------
+    // "Create a new app folder": the app becomes a folder named "Folder"
+    // holding it, in its place.
+    function createFolder(id) {
+        savePins(pinnedIds.map(e => e === id ? folderEntry("Folder", [id]) : e));
+    }
+    function renameFolder(key, name) {
+        name = String(name || "").trim() || "Folder";
+        savePins(pinnedIds.map(e => e === key ? folderEntry(name, parseFolder(e).ids) : e));
+    }
+    // "Remove from app folder": the app goes back into Pinned right after the
+    // folder (the folder's place, if it was the last one in it).
+    function removeFromFolder(key, id) {
+        const out = [];
+        for (const e of pinnedIds) {
+            if (e === key) {
+                const f = parseFolder(e);
+                const ids = f.ids.filter(x => x !== id);
+                if (ids.length > 0) out.push(folderEntry(f.name, ids));
+                out.push(id);
+            } else {
+                out.push(e);
+            }
+        }
+        savePins(out);
+    }
+    // Dragging: an app dropped on a folder joins it; on another app, the two
+    // become a new folder in the target's place.
+    function addToFolder(key, id) {
+        const f = parseFolder(key);
+        if (f.ids.indexOf(id) >= 0) return;
+        // out of wherever it was (this folder's entry stays as it is: the app
+        // is not in it), then into the folder
+        savePins(withoutApp(pinnedIds, id).map(e => e === key ? folderEntry(f.name, f.ids.concat([id])) : e));
+    }
+    function makeFolder(targetId, id) {
+        if (targetId === id) return;
+        const list = withoutApp(pinnedIds, id);
+        savePins(list.map(e => e === targetId ? folderEntry("Folder", [targetId, id]) : e));
+    }
 
     // ---- recent files: "Remove from list" and "Open file location" -----------
     // Removed files are only taken off the start menu (Tidewater's own list,
@@ -229,12 +329,6 @@ PlasmoidItem {
     // the file's folder, with the file selected (as KDE's apps do it)
     function revealFile(url) { handingOff = true; pyNow("reveal " + exec.q(url)); close(); }
 
-    function togglePin(id) {
-        const list = pinnedIds.slice();
-        const i = list.indexOf(id);
-        if (i >= 0) list.splice(i, 1); else list.push(id);
-        Plasmoid.configuration.pinned = list;
-    }
 
     // ---- categories  -----------------------------
     function categoryOf(app) {
