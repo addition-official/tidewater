@@ -224,7 +224,42 @@ Item {
                 color: page.pal.text2
             }
 
-            Heading { text: "Volume mixer" }
+            // a thin line between the sections, like Windows
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 10
+                implicitHeight: 1
+                color: page.pal.divider
+            }
+            // the heading, with a gear for the full sound settings (like Windows)
+            RowLayout {
+                Layout.fillWidth: true
+                Heading { text: "Volume mixer" }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.topMargin: 8
+                    implicitWidth: 32; implicitHeight: 32
+                    radius: 6
+                    color: gearArea.containsMouse ? page.pal.tintHover : "transparent"
+                    Glyph {
+                        anchors.centerIn: parent
+                        name: "settings"; fallback: "configure"
+                        size: 18; wght: 300
+                        color: page.pal.text1
+                        fontAvailable: page.pal.hasIconFont
+                    }
+                    MouseArea {
+                        id: gearArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: page.more()
+                    }
+                    QQC2.ToolTip.visible: gearArea.containsMouse
+                    QQC2.ToolTip.text: "Volume mixer settings"
+                    QQC2.ToolTip.delay: 500
+                }
+            }
             // the output device (the current one), then each app
             Repeater {
                 model: sinks
