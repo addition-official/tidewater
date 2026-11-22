@@ -103,6 +103,9 @@ Item {
     readonly property var owner: app
     function stopTyping() { reset(); }
     readonly property int pad: 28          // left and right edge of the content
+    // Raised surfaces (the category and folder tiles, the search box): a
+    // touch lighter than the menu, in light mode white-ish, like Windows 11
+    readonly property color raised: pal.dark ? pal.tint : Qt.rgba(1, 1, 1, 0.75)
     readonly property bool playing: Settings.showNowPlaying && !!(app.media && app.media.title)
 
     function reset() {
@@ -699,7 +702,7 @@ Item {
             width: parent.width - 16
             height: width
             radius: 8
-            color: sm.pal.tint
+            color: sm.raised
             border.width: 1
             border.color: sm.pal.stroke
             FocusRing { on: sm.kbFocused("all", ct.kbAt) }
@@ -817,7 +820,7 @@ Item {
             y: 10
             width: 40; height: 40
             radius: 8
-            color: sm.pal.tintHover
+            color: sm.pal.dark ? sm.pal.tintHover : sm.raised
             border.width: 1
             border.color: sm.pal.stroke
             Grid {
@@ -1056,9 +1059,11 @@ Item {
         radius: height / 2
         // typing, like Windows: darker, a grey outline and a blue magnifier
         // (no blue line)
-        color: search.activeFocus && sm.searching ? sm.pal.alpha(sm.pal.dark ? "black" : "white", 0.25) : sm.pal.tint
+        color: !sm.pal.dark ? "white"
+             : search.activeFocus && sm.searching ? sm.pal.alpha("black", 0.25) : sm.pal.tint
         border.width: 1
-        border.color: search.activeFocus && sm.searching ? sm.pal.alpha(sm.pal.text1, 0.25) : sm.pal.stroke
+        border.color: search.activeFocus && sm.searching ? sm.pal.alpha(sm.pal.text1, 0.25)
+                    : sm.pal.dark ? sm.pal.stroke : Qt.rgba(0, 0, 0, 0.12)
         Glyph {
             id: lens
             x: 14
@@ -1763,7 +1768,14 @@ Item {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 60
-        Rectangle { width: parent.width; height: 1; color: sm.pal.divider }
+        // A band of its own to the popup's edges, like Windows: Plasma's own
+        // footer (as in Kickoff), which reaches past the popup's padding and
+        // has the popup's corners, with the line along its top.
+        PlasmaExtras.PlasmoidHeading {
+            anchors.fill: parent
+            z: -1
+            position: QQC2.ToolBar.Footer
+        }
         Row {
             x: sm.pad + 4
             anchors.verticalCenter: parent.verticalCenter
