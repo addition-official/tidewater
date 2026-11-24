@@ -454,15 +454,24 @@ PlasmoidItem {
     // how many windows get a cell; the rest are counted in the "+N more" cell
     readonly property int shownCells: previewWindows.length > maxCells ? maxCells - 1 : previewWindows.length
 
-    // Where the card goes: above the hovered icon, always kept inside the
-    // monitor this taskbar is on. Plasma's own popup placement (visualParent)
-    // checks against the monitor Qt *thinks* a window is on, which with
-    // several monitors can be the wrong one and pushed the card onto the
-    // other monitor. The panel's own screen geometry is always right.
+    // Where the card goes: above the hovered icon, kept inside the monitor
+    // the icon is on. That monitor is found from Qt's own list of screens by
+    // where the icon is: the area Plasma reports for the panel's monitor
+    // (containment.screenGeometry) can be off from where the panel really
+    // is, and keeping the card inside it pushed the card far away from the
+    // icon. (Plasma's own popup placement, visualParent, checks against the
+    // monitor Qt *thinks* a window is on, which with several monitors put the
+    // card on the wrong one; hence placed by hand.)
+    function screenAt(px, py) {
+        for (const sc of Qt.application.screens) {
+            if (px >= sc.virtualX && px < sc.virtualX + sc.width && py >= sc.virtualY && py < sc.virtualY + sc.height)
+                return Qt.rect(sc.virtualX, sc.virtualY, sc.width, sc.height);
+        }
+        return null;
+    }
     function placePreview() {
         const t = hoveredTask;
-        const g = Plasmoid.containment.screenGeometry;
-        if (!t || g.width <= 0 || g.height <= 0)
+        if (!t)
             return;
         // The size the card is about to have: the popup window's own size
         // is out of date while it is hidden (Plasma only resizes it when shown).
@@ -470,19 +479,21 @@ PlasmoidItem {
         const w = card.width + (m ? m.left + m.right : 0);
         const h = card.height + (m ? m.top + m.bottom : 0);
         const icon = t.mapToGlobal(0, 0);
-        // The free area leaves out the panel, but not one that auto-hides:
-        // then the icon itself is the limit, so the card never covers the bar.
-        const free = Plasmoid.containment.availableScreenRect;
+        const cx = icon.x + t.width / 2;
+        const cy = icon.y + t.height / 2;
+        const g = screenAt(cx, cy) || Plasmoid.containment.screenGeometry;
+        if (g.width <= 0 || g.height <= 0)
+            return;
         const gap = 4;
-        let x = Math.round(icon.x + (t.width - w) / 2);
-        let y;
-        if (Plasmoid.location === PlasmaCore.Types.TopEdge) {
-            const below = icon.y + t.height;
-            y = Math.round((free.height > 0 ? Math.max(g.y + free.y, below) : below) + gap);
-        } else {
-            const above = free.height > 0 ? Math.min(g.y + free.y + free.height, icon.y) : icon.y;
-            y = Math.round(above - h - gap);
-        }
+        let x = Math.round(cx - w / 2);
+        // above the panel (below it, for a panel at the top), so the card never
+        // covers the bar: the panel's window is the edge
+        const win = t.Window.window;
+        const bar = win && win.contentItem ? win.contentItem.mapToGlobal(0, 0) : icon;
+        const barH = win ? win.height : t.height;
+        let y = Plasmoid.location === PlasmaCore.Types.TopEdge
+            ? Math.round(Math.max(icon.y + t.height, bar.y + barH) + gap)
+            : Math.round(Math.min(icon.y, bar.y) - h - gap);
         x = Math.max(g.x + gap, Math.min(g.x + g.width - w - gap, x));
         y = Math.max(g.y + gap, Math.min(g.y + g.height - h - gap, y));
         preview.x = x;
