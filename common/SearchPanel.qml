@@ -389,7 +389,9 @@ Item {
                             width: panel.listW
                             height: entry.best ? 62 : 54
                             radius: 8
-                            color: entry.isSelected || rowArea.containsMouse ? panel.pal.tintHover : "transparent"
+                            // the selected result (arrow keys) is marked; hovering only
+                            // lights a row up, like Windows (it does not select it)
+                            color: entry.isSelected ? panel.pal.tintHover : rowArea.containsMouse ? panel.pal.tint : "transparent"
                             Rectangle {
                                 visible: entry.isSelected
                                 anchors.verticalCenter: parent.verticalCenter
@@ -430,7 +432,6 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onEntered: panel.box.selected = entry.index
                                 onClicked: panel.box.activate(entry.modelData)
                             }
                         }
