@@ -67,8 +67,44 @@ PlasmoidItem {
     property Item button: null          // set by the panel button below
     function onScreen() { return !!(button && button.shown); }
     property double shownAt: 0          // when the panel button last appeared
-    property bool settled: false        // set when the deferred open fires
-    Timer { id: settleOpen; onTriggered: { root.settled = true; root.expanded = true; } }
+    property bool settled: false        // set when a deferred open fires
+    property bool waitingForPanel: false
+    property double trustUntil: 0
+    // Never wait long: if the panel still looks out of place after 3 s, open
+    // anyway (and stop checking for a minute, so it doesn't happen each time)
+    Timer {
+        id: panelGiveUp
+        interval: 3000
+        onTriggered: if (root.waitingForPanel) {
+            console.warn("tidewater: the panel did not look in place; opening the start menu anyway");
+            root.waitingForPanel = false;
+            root.trustUntil = Date.now() + 60000;
+            root.settled = true;
+            root.expanded = true;
+        }
+    }
+    // The panel's window moved or changed size: open a menu that was waiting
+    // for it, or have Plasma place an open one again (Plasma does not on its
+    // own until the menu's next repaint).
+    function panelMoved() {
+        if (waitingForPanel && button && button.anchorOk()) {
+            waitingForPanel = false;
+            panelGiveUp.stop();
+            settled = true;
+            expanded = true;
+        } else if (expanded) {
+            const w = fullRepresentationItem ? fullRepresentationItem.Window.window : null;
+            // setting "animated" makes Plasma work the popup's position out again
+            if (w && w.animated !== undefined) { w.animated = w.animated; w.requestUpdate(); }
+        }
+    }
+    Connections {
+        target: root.button ? root.button.Window.window : null
+        function onXChanged() { root.panelMoved(); }
+        function onYChanged() { root.panelMoved(); }
+        function onWidthChanged() { root.panelMoved(); }
+        function onHeightChanged() { root.panelMoved(); }
+    }
     Component.onDestruction: {
         Launchers.remove(root);
         Settings.removeOwner(root);
@@ -79,19 +115,14 @@ PlasmoidItem {
     onExpandedChanged: {
         if (!root.expanded) { menuClosed(); return; }
         if (onScreen()) {
-            // Just after Plasma (re)starts the panel may still be moving into
-            // place, and a popup placed now can land in the corner: open it
-            // again a moment later, once the panel has settled.
-            const early = 1500 - (Date.now() - shownAt);
-            if (early > 0 && !settled) {
+            // The panel not in place yet (see button.anchorOk): open the menu
+            // once it is (the panel's window moving brings it, panelMoved), so
+            // Plasma places it from the right position.
+            if (!settled && Date.now() > trustUntil && !button.anchorOk()) {
                 root.expanded = false;
                 // asked again while waiting: that is a second click, so close
-                if (settleOpen.running) {
-                    settleOpen.stop();
-                } else {
-                    settleOpen.interval = early;
-                    settleOpen.start();
-                }
+                if (waitingForPanel) { waitingForPanel = false; panelGiveUp.stop(); }
+                else { waitingForPanel = true; panelGiveUp.restart(); }
                 return;
             }
             settled = false;
@@ -128,7 +159,12 @@ PlasmoidItem {
     }
 
     // ---- actions --------------------------------------------------------------
-    function close() { root.expanded = false; }
+    // the search is cleared before the menu hides, so Plasma keeps its normal
+    // size (not the wider searching one) for the next open
+    function close() {
+        if (fullRepresentationItem && fullRepresentationItem.reset) fullRepresentationItem.reset();
+        root.expanded = false;
+    }
     // The new design's "View:" menu (category, grid, list): kept like any
     // other Tidewater setting (see "Tidewater settings" below)
     function setStartView(v) {
@@ -543,6 +579,33 @@ PlasmoidItem {
             // on a panel that is actually showing (read here: "Window" is per item)
             readonly property bool shown: visible && width > 0 && Window.window !== null && Window.window.visible
             onShownChanged: if (shown) root.shownAt = Date.now()
+            // Is the panel where it really is? Plasma places the menu from the
+            // panel window's position as it knows it, which is briefly wrong
+            // after Plasma starts or a monitor comes back (e.g. waking from
+            // sleep): a menu opened then lands somewhere else on the screen.
+            // In place: the button and the panel window lie on one monitor
+            // (Qt's list of screens, by where the button is), the panel against
+            // that monitor's edge.
+            function anchorOk() {
+                const w = Window.window;
+                if (!shown || !w || width <= 0) return false;
+                const b = mapToGlobal(0, 0);
+                const cx = b.x + width / 2, cy = b.y + height / 2;
+                let sc = null;
+                for (const s of Qt.application.screens)
+                    if (cx >= s.virtualX && cx < s.virtualX + s.width && cy >= s.virtualY && cy < s.virtualY + s.height) { sc = s; break; }
+                if (!sc) return false;
+                const sx = sc.virtualX, sy = sc.virtualY, sw = sc.width, sh = sc.height;
+                if (w.x < sx - 1 || w.y < sy - 1 || w.x + w.width > sx + sw + 1 || w.y + w.height > sy + sh + 1)
+                    return false;
+                const near = 48;   // a floating panel keeps a gap from the edge
+                switch (Plasmoid.location) {
+                case PlasmaCore.Types.TopEdge: return w.y <= sy + near;
+                case PlasmaCore.Types.LeftEdge: return w.x <= sx + near;
+                case PlasmaCore.Types.RightEdge: return w.x + w.width >= sx + sw - near;
+                default: return w.y + w.height >= sy + sh - near;
+                }
+            }
             anchors.centerIn: parent
             pal: design
             // closed: gray pill with a blue icon, hover like the Search pill; open: solid blue
@@ -577,9 +640,12 @@ PlasmoidItem {
         Layout.maximumHeight: implicitHeight
         Connections {
             target: root
-            // fresh each time it opens; and cleared as it closes, so it never
-            // opens showing (and sized for) the last search
-            function onExpandedChanged() { startMenu.reset(); }
+            // cleared as it closes, so it never opens showing (and sized for)
+            // the last search; focused on the search box as it opens
+            function onExpandedChanged() {
+                if (root.expanded) startMenu.focusSearch();
+                else startMenu.reset();
+            }
         }
     }
 }

@@ -119,6 +119,7 @@ Item {
         selected = 0;
         search.forceActiveFocus();
     }
+    function focusSearch() { search.forceActiveFocus(); }
     function activate(item) {
         if (!item) return;
         if (item.kind === "app" || item.kind === "setting") app.launch(item.id);
